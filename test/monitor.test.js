@@ -145,4 +145,32 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   monitor.stop()
 }
 
+// --- getSelfPath without per-source values (plugin API): the live delta
+//     stream supplies them.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stream-'))
+  const zcfFile = path.join(dir, 'installation.zcf')
+  fs.copyFileSync(path.join(__dirname, 'fixtures', 'TestBench.zcf'), zcfFile)
+  let emit = null
+  const app = {
+    getSelfPath: p => (p === 'electrical.batteries.0.voltage' ? { value: 11.93, $source: 'n2k-on-ve.can-socket.224' } : undefined),
+    streambundle: { getSelfBus: () => ({ onValue: fn => { emit = fn; return () => { emit = null } } }) },
+    debug: () => {}
+  }
+  const monitor = createMonitor(app)
+  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  monitor.learnModuleSource('10:00:00.000 R 1CFF0409 27 99 04 0E 00 00 00 00')
+  emit({ path: 'electrical.batteries.0.voltage', value: 11.93, $source: 'n2k-on-ve.can-socket.224' })
+  emit({ path: 'electrical.batteries.0.voltage', value: 11.84, $source: 'n2k-on-ve.can-socket.9' })
+  const routes = {}
+  monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
+  let out
+  routes['/monitor/items']({ query: {} }, { json: v => { out = v } })
+  assert.strictEqual(out.items.find(i => i.name === 'House Battery').readings[0].value, 11.84)
+  routes['/monitor/debug']({ query: { path: 'electrical.batteries.0.voltage' } }, { json: v => { out = v } })
+  assert.deepStrictEqual(out.stream, { 'n2k-on-ve.can-socket.224': 11.93, 'n2k-on-ve.can-socket.9': 11.84 })
+  monitor.stop()
+  assert.strictEqual(emit, null)
+}
+
 console.log('Monitor tests passed')
