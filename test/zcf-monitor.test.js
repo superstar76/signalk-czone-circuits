@@ -17,11 +17,13 @@ const pick = (list, keys) => list.map(x => Object.fromEntries(keys.map(k => [k, 
 {
   const buf = load('TestBench.zcf')
   const m = parseMeters(buf)
-  assert.deepStrictEqual(pick(m.meters, ['name', 'type', 'module', 'meterInput', 'instance']), [
-    { name: 'Victron Shunt', type: 'DC', module: 0, meterInput: null, instance: 1 },
-    { name: 'House Battery', type: 'DC', module: 4, meterInput: 0, instance: null },
-    { name: 'Power In', type: 'AC', module: 4, meterInput: 0, instance: null },
-    { name: 'Power Out', type: 'AC', module: 4, meterInput: 1, instance: null }
+  // House Battery instance 0 confirmed live: Meter Interface (NMEA 2000
+  // source 9) publishes electrical.batteries.0.
+  assert.deepStrictEqual(pick(m.meters, ['name', 'type', 'module', 'instance']), [
+    { name: 'Victron Shunt', type: 'DC', module: 0, instance: 1 },
+    { name: 'House Battery', type: 'DC', module: 4, instance: 0 },
+    { name: 'Power In', type: 'AC', module: 4, instance: 0 },
+    { name: 'Power Out', type: 'AC', module: 4, instance: 1 }
   ])
   const i = parseInputs(buf)
   assert.deepStrictEqual(i.inputs.map(x => [x.name, x.module, x.input, x.wiring]), [
@@ -53,6 +55,13 @@ const pick = (list, keys) => list.map(x => Object.fromEntries(keys.map(k => [k, 
     ['BMS Pre-Alarm', 1, 'switchToPos'], ['Anchor Up', 2, 'switchToPos'],
     ['High Bilge Water Alarm', 2, 'switchToNeg'], ['Ignition', 2, 'switchToPos']
   ])
+}
+
+// --- SugarShack: instances well above any module's input count, so the field
+//     is the configured NMEA 2000 instance, not an input number.
+{
+  const m = parseMeters(load('SugarShack-20260927-01.zcf')).meters
+  assert(m.some(x => x.instance === 31 && x.module === 0x28))
 }
 
 // --- Every fixture: both tables must walk exactly.

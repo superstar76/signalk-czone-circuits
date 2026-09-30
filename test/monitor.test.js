@@ -82,12 +82,13 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   assert.strictEqual(hb.readings.find(r => r.key === 'soc').path, 'electrical.batteries.1.stateOfCharge')
 }
 
-// --- Catalogue: TestBench wired meter is listed but flagged, not guessed.
+// --- Catalogue: TestBench wired meter uses its ZCF instance, source-filtered
+//     to the Meter Interface (module 0x04).
 {
   const { items } = buildCatalog(fixture('TestBench.zcf'))
   const hb = items.find(i => i.name === 'House Battery')
-  assert.deepStrictEqual(hb.readings, [])
-  assert(/not in the ZCF/.test(hb.note))
+  assert.strictEqual(hb.readings[0].candidates[0], 'electrical.batteries.0.voltage')
+  assert(hb.readings.every(r => r.sourceModule === 4))
   assert.deepStrictEqual(items.filter(i => i.group === 'Circuit current').map(i => i.name),
     ['Buzzer', 'Light 1', 'Light 2', 'Light 3', 'Light 4', 'Light 5'])
 }
@@ -114,6 +115,34 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   assert.strictEqual(call('/trend/status').available, true)
   monitor.stop()
   assert(fs.readdirSync(path.join(dir, 'trends')).includes('tanks.fuel.0.currentLevel'))
+}
+
+// --- Source filtering: two devices publish electrical.batteries.0 (bench,
+//     1 Oct 2026). The wired meter must read the Meter Interface only.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'src-'))
+  const zcfFile = path.join(dir, 'installation.zcf')
+  fs.copyFileSync(path.join(__dirname, 'fixtures', 'TestBench.zcf'), zcfFile)
+  const sk = {
+    'electrical.batteries.0.voltage': {
+      value: 11.93, $source: 'n2k-on-ve.can-socket.224',
+      values: { 'n2k-on-ve.can-socket.224': { value: 11.93 }, 'n2k-on-ve.can-socket.9': { value: 11.84 } }
+    }
+  }
+  const monitor = createMonitor({ getSelfPath: p => sk[p], debug: () => {} })
+  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  const routes = {}
+  monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
+  const call = p => { let out; routes[p]({ query: {} }, { json: v => { out = v } }); return out }
+  // Source not learned yet: not mapped rather than taking the Cerbo's value.
+  assert.strictEqual(call('/monitor/items').items.find(i => i.name === 'House Battery').mapped, false)
+  // Meter Interface status frame from source 9: "27 99 04 0E …".
+  monitor.learnModuleSource('10:00:00.000 R 1CFF0409 27 99 04 0E 00 00 00 00')
+  assert.deepStrictEqual(call('/monitor/modules').modules, { '0x04': 9 })
+  const hb = call('/monitor/items').items.find(i => i.name === 'House Battery')
+  assert.strictEqual(hb.readings[0].value, 11.84)
+  assert.strictEqual(hb.readings[0].series, 'electrical.batteries.0.voltage@czone-04')
+  monitor.stop()
 }
 
 console.log('Monitor tests passed')

@@ -102,11 +102,13 @@ table is only accepted when exactly `count` records end exactly at the declared 
 
 ## Meters
 
-`record: u8 ac (0 DC / 1 AC) | u8 index | u8 module | u8 nameLength | name`
+`record: u8 ac (0 DC / 1 AC) | u8 instance | u8 module | u8 nameLength | name`
 
-- `module 0` = virtual/third-party meter; `index` = its NMEA 2000 instance.
-- `module ≠ 0` = meter wired to that module (e.g. Meter Interface `0x04`); `index` = 0-based
-  meter input on the module (Config Tool "DC 1" = 0, "AC 2" = 1).
+- `instance` = the meter's configured NMEA 2000 instance (SugarShack uses 16–31, so it is not an
+  input number). Bench: Meter Interface "House Battery" instance 0 publishes `electrical.batteries.0`.
+- `module 0` = virtual/third-party meter; `module ≠ 0` = meter wired to that module, which
+  broadcasts it. Another device may publish the same instance (the Cerbo re-broadcasts its
+  battery as instance 0 on the bench), so read wired meters from the module's own source address.
 
 ## Inputs (signal inputs + third-party senders)
 
