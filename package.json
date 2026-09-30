@@ -34,6 +34,6 @@
     "screenshots": []
   },
   "scripts": {
-    "test": "node test/nmea.test.js && node test/zcf.test.js && node test/zcf-regression.test.js && node test/zcf-generic-fixtures.test.js && node test/write.test.js && node test/circuit-status.test.js && node test/bench-status.test.js && node test/bench-state.test.js && node test/state.test.js && node test/config-network.test.js"
+    "test": "node test/nmea.test.js && node test/zcf.test.js && node test/zcf-regression.test.js && node test/zcf-generic-fixtures.test.js && node test/write.test.js && node test/circuit-status.test.js && node test/bench-status.test.js && node test/bench-state.test.js && node test/state.test.js && node test/config-network.test.js && node test/zcf-circuits.test.js && node test/zcf-monitor.test.js && node test/monitor.test.js"
   }
 }

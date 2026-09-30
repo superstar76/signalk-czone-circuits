@@ -6,6 +6,7 @@ const zcf = require('./lib/zcf')
 const czone = require('./lib/czone')
 const nmea = require('./lib/nmea2000')
 const signalk = require('./lib/signalk')
+const { createMonitor } = require('./lib/monitor')
 
 const MAX_UPLOAD_BYTES = 1024 * 1024
 const CZONE_CONFIG_BLOCK_HEADER = 23
@@ -93,6 +94,7 @@ function networkTimestamp (date = new Date()) {
 
 module.exports = function (app) {
   let settings = {}
+  const monitor = createMonitor(app)
   let mapping = null
   let restartPlugin = null
   let nmeaReady = false
@@ -948,6 +950,7 @@ module.exports = function (app) {
       restartPlugin = restart
       fs.mkdirSync(configDir, { recursive: true })
       loadConfiguredZcf()
+      monitor.start(settings, zcfPath())
       registerCircuitPutHandlers()
       registerModePutHandlers()
 
@@ -1007,6 +1010,7 @@ module.exports = function (app) {
     },
 
     stop: () => {
+      monitor.stop()
       if (startupModeInferenceTimer) clearTimeout(startupModeInferenceTimer)
       startupModeInferenceTimer = null
       nmeaReady = false
@@ -1028,6 +1032,7 @@ module.exports = function (app) {
     },
 
     registerWithRouter: router => {
+      monitor.registerRoutes(router)
       router.get('/status', (_req, res) => {
         res.json({
           sendingEnabled: settings.enableSending === true,
