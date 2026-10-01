@@ -72,6 +72,10 @@ var signalk_czone_circuits = (function () {
       persist({ enableSending: value })
     }
 
+    function setVictronSwitches (value) {
+      persist({ victronSwitches: value })
+    }
+
     function chooseSource (value) {
       setLocalSource(value)
       if (value === 'installedZcf') {
@@ -219,6 +223,14 @@ var signalk_czone_circuits = (function () {
           ' Allow this plugin to send NMEA 2000 messages'
         ),
         React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'When enabled, the plugin can send CZone circuit and Mode control PGNs to your NMEA 2000 network.')
+      ),
+
+      React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
+        React.createElement('label', null,
+          React.createElement('input', { type: 'checkbox', checked: configuration.victronSwitches === true, disabled: busy, onChange: function (e) { setVictronSwitches(e.target.checked) } }),
+          ' Show CZone circuits in the Victron switch pane'
+        ),
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Venus OS 3.60 or newer. Adds every circuit to the GX switch pane and VRM, one card per CZone category. Switching from the pane also needs NMEA 2000 sending allowed above.')
       ),
 
       current ? React.createElement('div', { style: { fontSize: 12 } }, 'Currently loaded: ' + (current.vesselName || current.fileName) + ' · ' + current.circuits + ' circuits · ' + current.modes + ' modes') : null,

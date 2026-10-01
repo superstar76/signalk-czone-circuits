@@ -942,6 +942,12 @@ module.exports = function (app) {
           default: '',
           description: 'Used when Configuration source is set to Saved network configuration. Use the CZone Circuits configuration panel to read a new configuration from the network.'
         },
+        victronSwitches: {
+          type: 'boolean',
+          title: 'Show CZone circuits in the Victron switch pane',
+          default: false,
+          description: 'Venus OS 3.60+ only. Adds every circuit to the GX switch pane (and VRM), grouped by CZone category. Switching from the pane still needs NMEA 2000 sending enabled.'
+        }
       }
     }),
 
