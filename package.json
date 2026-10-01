@@ -1,6 +1,6 @@
 {
   "name": "signalk-czone-circuits",
-  "version": "0.1.0-beta.15",
+  "version": "0.1.0-beta.20",
   "description": "Signal K CZone circuit control using dynamically parsed ZCF configuration and Signal K NMEA 2000 output",
   "author": "svSugarShack <matt@ick.com>",
   "signalk-plugin-enabled-by-default": true,
@@ -34,6 +34,6 @@
     "screenshots": []
   },
   "scripts": {
-    "test": "node test/nmea.test.js && node test/zcf.test.js && node test/zcf-regression.test.js && node test/zcf-generic-fixtures.test.js && node test/write.test.js && node test/circuit-status.test.js && node test/bench-status.test.js && node test/bench-state.test.js && node test/state.test.js && node test/config-network.test.js && node test/zcf-circuits.test.js && node test/zcf-monitor.test.js && node test/monitor.test.js"
+    "test": "node test/nmea.test.js && node test/zcf.test.js && node test/zcf-regression.test.js && node test/zcf-status-structural.test.js && node test/zcf-generic-fixtures.test.js && node test/zcf-robust-fixtures.test.js && node test/write.test.js && node test/circuit-status.test.js && node test/bench-status.test.js && node test/bench-state.test.js && node test/state.test.js && node test/config-network.test.js && node test/zcf-circuits.test.js && node test/zcf-monitor.test.js && node test/monitor.test.js"
   }
 }

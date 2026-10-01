@@ -12,12 +12,24 @@ assert(bimini, 'Bimini Lights must be present in supplied ZCF')
 assert(deck, 'Deck Spot Lights must be present in supplied ZCF')
 assert.deepStrictEqual(
   { module: bimini.module, channel: bimini.channel, slot: bimini.slot, zcfCircuitId: bimini.zcfCircuitId },
-  { module: 20, channel: 14, slot: 6, zcfCircuitId: 0x44 }
+  { module: 26, channel: 4, slot: 4, zcfCircuitId: 0x44 }
 )
 assert.deepStrictEqual(
   { module: deck.module, channel: deck.channel, slot: deck.slot, zcfCircuitId: deck.zcfCircuitId },
-  { module: 22, channel: 8, slot: 0, zcfCircuitId: 0x21 }
+  { module: 28, channel: 14, slot: 6, zcfCircuitId: 0x21 }
 )
+
+// 200L Fridge's circuit record contains the same E8 03 bytes that occur in
+// status records. Status mapping is structural: it reads the separate status
+// table after the circuit table and therefore cannot confuse the circuit bytes
+// with the status record.
+const fridge100 = mapping.circuits.find(c => c.name === '100L Fridge')
+const fridge200 = mapping.circuits.find(c => c.name === '200L Fridge')
+assert.strictEqual(fridge100.statusModule, 0x14)
+assert.strictEqual(fridge100.statusBit, 13)
+assert.strictEqual(fridge200.statusModule, 0x1A)
+assert.strictEqual(fridge200.statusBit, 13)
+assert.strictEqual(fridge200.statusMask, 1 << 13)
 
 // These are configuration-module identities. The captured 65284 runtime
 // status frames use different module bytes (Bimini 26, Deck 28). Do not

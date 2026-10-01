@@ -3,12 +3,27 @@
 Signal K control plugin for CZone circuits and Modes using a dynamically parsed
 CZone ZCF configuration.
 
-**Current release:** `0.1.0-beta.15`
+**Current release:** `0.1.0-beta.19`
 
 > **Beta status:** This project is an active reverse-engineering and field-testing
 > project. The ZCF parser has been broadened and regression-tested against multiple
 > CZone configurations, but some control mappings remain provisional until they are
 > exercised against the corresponding live CZone system.
+
+## Beta 16
+
+Beta 16 replaces the earlier byte-signature circuit scan with a structural ZCF circuit-table parser. The parser reads the table length and record count, then consumes each circuit record using its declared control/output lengths, so logic blocks, Modes, extended output records, and other record types cannot desynchronise the scan.
+
+Circuit filtering is deliberately conservative:
+
+- Logic blocks are excluded from the circuit list using their ZCF flag bit.
+- Modes are identified from their category/record structure and remain in the separate Mode list.
+- A circuit with no controls is **not** automatically discarded. It is excluded only when another circuit with the same name has controls, which removes internal duplicate copies while preserving real zero-control circuits such as Sel Citron's Salon Air Conditioner, Meitaki's Cabin Fans/Cockpit USB, and Sugar Shack's four solar chargers.
+- Virtual/VS circuits are not blanket-filtered; entries such as VS - HWC Port and Watermaker Fault VS remain available when present in the ZCF.
+
+The parser also consumes extended output records correctly and retains their channel/module/level information. The supplied six ZCF fixtures are now structural regression tests, including an exact 107-name Meitaki list with the user-facing Audible Alarm at circuit ID `0x20` (32).
+
+The module-table parser was also tightened: the byte immediately after the table length is the device count, and each module record consumes its trailing byte explicitly. This removes the previous byte-by-byte resynchronisation fallback while retaining the corrected high-bit name-length handling.
 
 ## Beta 15
 
@@ -85,12 +100,12 @@ Regression fixtures currently cover six configurations:
 
 | ZCF fixture | Circuits found | Configuration name |
 |---|---:|---|
-| TestBench | 5 | Test Bench |
-| Compass Rose | 21 | Compass Rose 28.06.26 |
-| Persevere | 59 | Persevere 14.07.25 |
-| Sel Citron | 100 | Sel Citron 02.04.25 |
-| Meitaki | 103 | Meitaki 07.04.25 |
-| Sugar Shack | 108 | Sugar Shack-20260927-01 |
+| TestBench | 6 | Test Bench |
+| Compass Rose | 35 | Compass Rose 28.06.26 |
+| Persevere | 58 | Persevere 14.07.25 |
+| Sel Citron | 102 | Sel Citron 02.04.25 |
+| Meitaki | 107 | Meitaki 07.04.25 |
+| Sugar Shack | 110 | Sugar Shack-20260927-01 |
 
 The parser changes are also used by the **Read From Network and Save** path: after
 CZone network DataBlock reassembly produces the complete configuration byte stream,
@@ -427,3 +442,7 @@ on the fast local-file path and avoids a multi-second CZone configuration transf
 `.czone.net` is intentionally used instead of `.zcf`: the plugin has reconstructed the CZone
 configuration byte stream from the network, but does not claim to produce an officially sanctioned
 CZone configuration file.
+
+### Beta.19 status-table parser
+
+Beta.19 replaces ZCF status mapping based on binary/name signature scans with a structural parser for the status/load table immediately following the circuit table. The parser uses the table length/count and record boundaries, then builds a name lookup map once. This prevents circuit records containing byte sequences such as `E8 03` from being mistaken for runtime status records and avoids repeatedly scanning the whole ZCF.

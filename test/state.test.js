@@ -156,6 +156,26 @@ assert.strictEqual(modeDelta.updates[0].values[0].value, 'nightCruising')
   console.log('AC CZone 65284 status mapping tests passed')
 }
 
+// Virtual Timed Water Heater circuits do not have same-named status records.
+// Their ZCF extended outputs structurally map them to the AC status table: bit
+// 0 = Water Heater Port and bit 1 = Water Heater Stbd. A returning 65284 packet
+// must therefore update the corresponding virtual circuit state.
+{
+  const portPath = 'electrical.czone.Timed_Port_Water_Heater.switch.state'
+  const stbdPath = 'electrical.czone.Timed_Stbd_Water_Heater.switch.state'
+  const before = deltas.length
+  rawListeners.get('canboatjs:rawoutput')('2026-09-27T06:00:03.000Z R 1CFF040B 27 99 F8 0A 01 00 00 00')
+  const port = deltas.slice(before).find(d => d.updates[0].values.some(v => v.path === portPath))
+  assert(port)
+  assert.strictEqual(port.updates[0].values.find(v => v.path === portPath).value, true)
+
+  rawListeners.get('canboatjs:rawoutput')('2026-09-27T06:00:03.100Z R 1CFF040B 27 99 F8 0A 02 00 00 00')
+  const stbd = deltas.slice(before).find(d => d.updates[0].values.some(v => v.path === stbdPath))
+  assert(stbd)
+  assert.strictEqual(stbd.updates[0].values.find(v => v.path === stbdPath).value, true)
+  console.log('Virtual Timed Water Heater runtime status tests passed')
+}
+
 plugin.stop()
 console.log('Signal K CZone observed state and Mode observation tests passed')
 

@@ -1,0 +1,80 @@
+/* Monitoring view. Built from the webapp's own classes (.section,
+   .section-head, .circuit, .tag, .status, .stat) so it inherits the theme;
+   this file only adds what those don't cover.
+   Group colours are tokens so a theme configurator can set them later. */
+:root {
+  --mon-batteries: #31d58a;
+  --mon-ac: #b877ff;
+  --mon-tanks: #27d7d5;
+  --mon-temperatures: #ff9f58;
+  --mon-environment: #54c7ff;
+  --mon-current: #ffc34d;
+  --mon-inputs: #8ea0b6;
+  --mon-other: #8ea0b6;
+}
+
+#monitorView, .mon-trend { display:none; }
+#monitorView.show, .mon-trend.show { display:block; }
+.mon-trend { margin-bottom:14px; }
+
+.section-head .mon-pill { margin-left:auto; }
+.mon-pill { display:inline-flex; align-items:center; gap:7px; font-size:11px; color:#a9bfd2; background:#0c2135; border:1px solid var(--line); border-radius:999px; padding:7px 12px; }
+.mon-pill i { width:8px; height:8px; border-radius:50%; background:#ffb84d; }
+.mon-pill.ok i { background:var(--green); box-shadow:0 0 10px rgba(49,213,138,.6); }
+.mon-check { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#a9bfd2; cursor:pointer; }
+
+/* Group sub-header inside the section, same weight as the list rows */
+.mon-subhead { display:flex; align-items:center; gap:10px; padding:11px 15px; background:rgba(15,34,55,.65); border-bottom:1px solid rgba(148,193,235,.10); }
+.mon-subhead strong { font-size:13px; letter-spacing:.2px; }
+.mon-subhead .subtle { color:var(--muted); font-size:11px; margin-left:auto; }
+
+/* Coloured group icon, like the category cards */
+.mon-icon { width:30px; height:30px; border-radius:10px; display:grid; place-items:center; font-size:15px; background:color-mix(in srgb, var(--cat) 16%, transparent); color:var(--cat); }
+
+/* Rows: the .circuit grid from the webapp */
+.mon-row.clickable { cursor:pointer; }
+.mon-row.unmapped { opacity:.5; }
+.mon-row.active { background:linear-gradient(90deg, color-mix(in srgb, var(--cat) 16%, transparent), transparent 70%); box-shadow:inset 3px 0 0 var(--cat); }
+.mon-row .status.on { color:color-mix(in srgb, var(--cat) 75%, white); }
+.mon-row .status.on .status-dot { background:var(--cat); box-shadow:0 0 12px color-mix(in srgb, var(--cat) 70%, transparent); }
+.mon-chip { border:0; cursor:pointer; font:inherit; font-size:10px; }
+.mon-chip:hover { background:color-mix(in srgb, var(--cat) 22%, #152d44); color:#fff; }
+.mon-level { display:inline-block; align-self:center; width:70px; height:6px; border-radius:3px; background:#152d44; overflow:hidden; }
+.mon-level span { display:block; height:100%; border-radius:3px; background:var(--cat); }
+/* Value box: same footprint as the ON/OFF toggle */
+.mon-value { min-width:78px; min-height:42px; padding:9px 13px; border:1px solid rgba(148,193,235,.22); border-radius:12px; background:#172b40; font-weight:750; font-size:15px; display:flex; align-items:baseline; justify-content:center; gap:4px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.mon-value small { font-weight:500; font-size:11px; color:var(--muted); }
+.mon-row.clickable:hover .mon-value { border-color:color-mix(in srgb, var(--cat) 55%, transparent); }
+
+/* Trend panel */
+.mon-trend .section-head .mon-close { margin-left:auto; cursor:pointer; }
+.mon-trend-icon .cat-icon { width:34px; height:34px; font-size:16px; }
+.mon-controls { display:flex; gap:8px; padding:13px 15px 0; flex-wrap:wrap; align-items:center; }
+.mon-seg { display:inline-flex; border:1px solid var(--line); border-radius:11px; overflow:hidden; background:#0c2135; }
+.mon-seg button { border:0; background:transparent; color:#c6d6e7; padding:8px 13px; cursor:pointer; font-size:12px; }
+.mon-seg button + button { border-left:1px solid var(--line); }
+.mon-seg button:hover { background:rgba(55,143,215,.12); }
+.mon-seg button.active { background:linear-gradient(135deg,#168eea,#2164b8); color:#fff; }
+.mon-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; padding:12px 15px 0; }
+.mon-stats .stat { border:1px solid var(--line); border-radius:12px; background:rgba(10,29,47,.72); padding:8px 11px; }
+.mon-stats .stat-icon { color:var(--cat); background:color-mix(in srgb, var(--cat) 14%, #10263b); }
+.mon-stats .stat strong { font-variant-numeric:tabular-nums; }
+.mon-stats .stat strong small { font-size:11px; color:var(--muted); font-weight:500; }
+.mon-trend { --mon-line: var(--cat); }
+.mon-chart { position:relative; padding:12px 12px 14px; }
+.mon-chart canvas { width:100%; height:300px; display:block; }
+.mon-tip { position:absolute; pointer-events:none; background:#0f2237; border:1px solid var(--line); border-radius:9px; padding:6px 9px; font-size:11px; color:var(--text); white-space:nowrap; display:none; box-shadow:0 8px 20px rgba(0,0,0,.35); }
+.mon-tip small { display:block; color:var(--muted); }
+.mon-chart-msg { position:absolute; inset:0; display:none; align-items:center; justify-content:center; color:var(--muted); font-size:13px; text-align:center; padding:30px; }
+.mon-chart-msg.show { display:flex; }
+
+@media (max-width: 780px) {
+  #monitorView.show, .mon-trend.show { grid-column:1; order:9; margin:12px 12px 0; }
+  .mon-trend.show { order:8; }
+  .section-head .mon-pill { margin-left:0; }
+  .mon-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .mon-chart canvas { height:230px; }
+  .mon-row .control { justify-content:flex-end; }
+  .mon-row .arrow { display:none; }
+  .mon-row .mon-icon { width:26px; height:26px; font-size:13px; }
+}

@@ -31,6 +31,6 @@ assert.deepStrictEqual(
 // circuit named Buzzer in the TestBench circuit table. Light 5 therefore uses
 // its own 0x10 load mask even when the physical status bitmap reports 0x30.
 assert.strictEqual(find('Light 5').statusMask, 0x10)
-assert.strictEqual(mapping.circuits.some(c => c.name === 'Buzzer'), false)
+assert.strictEqual(mapping.circuits.some(c => c.name === 'Buzzer'), true)
 
 console.log('TestBench load-table status mapping tests passed')

@@ -85,7 +85,7 @@ const currentZcfPath = '/mnt/data/SugarShack-20260927-01.zcf'
 if (fs.existsSync(currentZcfPath)) {
   const current = zcf.load(currentZcfPath)
   const currentStatusMappingCount = current.circuits.filter(c => Number.isInteger(c.statusModule) && Number.isInteger(c.statusBit)).length
-  assert.strictEqual(currentStatusMappingCount, 91)
+  assert.strictEqual(currentStatusMappingCount, 100)
   assert.deepStrictEqual(
     current.modes.map(m => [m.id, m.runtimeId, m.modeGroupId, m.name, m.actionCount, m.parsedActionCount, m.truncated]),
     [

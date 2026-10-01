@@ -36,7 +36,7 @@ const galleyState = 'electrical.czone.Galley_Lights.switch.state'
 const galleyBrightness = 'electrical.czone.Galley_Lights.switch.brightness'
 const pianoState = 'electrical.czone.Piano_Light.switch.state'
 
-assert.strictEqual(putHandlers.size, 108 + 13 + 1)
+assert.strictEqual(putHandlers.size, 110 + 13 + 1)
 assert(putHandlers.has(galleyState))
 assert(putHandlers.has(galleyBrightness))
 assert(putHandlers.has(pianoState))

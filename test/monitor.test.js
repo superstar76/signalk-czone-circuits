@@ -173,4 +173,42 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   assert.strictEqual(emit, null)
 }
 
+// --- Circuit current from PGN 130822 (SugarShack, 27 Sep 2026 log): module
+//     0x14 page 1 slot 7 = COI channel 15 = Starlink, 0x1F = 3.1 A.
+{
+  const { decodeCurrentPacket } = require('../lib/monitor/currents')
+  const hex = '2799140100000400000400e80700e80700e80700000400000400e807'
+  const d = decodeCurrentPacket(130822, Buffer.from(hex.slice(0, 50) + '1fe807', 'hex'))
+  assert.strictEqual(d.module, 0x14)
+  assert.strictEqual(d.slots[7].channel, 15)
+  assert.strictEqual(d.slots[7].amps, 3.1)
+  // 130817 carries page before module (bench Output Interface 0x01).
+  assert.strictEqual(decodeCurrentPacket(130817, Buffer.from('27990001' + '0100e8'.repeat(8), 'hex')).module, 0x01)
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cur-'))
+  const zcfFile = path.join(dir, 'installation.zcf')
+  fs.copyFileSync(path.join(__dirname, 'fixtures', 'SugarShack-20260927-01.zcf'), zcfFile)
+  const published = []
+  const app = { handleMessage: (id, delta) => published.push(...delta.updates[0].values), debug: () => {} }
+  const monitor = createMonitor(app)
+  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  // Fast packet as canboatjs raw lines: 1DFF0614 = PGN 130822 from source 0x14.
+  const payload = Buffer.from(hex.slice(0, 50) + '1fe807', 'hex')
+  const frames = [Buffer.concat([Buffer.from([0x40, 28]), payload.subarray(0, 6)])]
+  for (let o = 6, n = 1; o < 28; o += 7, n++) {
+    const chunk = Buffer.alloc(7, 0xff); payload.subarray(o, o + 7).copy(chunk)
+    frames.push(Buffer.concat([Buffer.from([0x40 | n]), chunk]))
+  }
+  for (const f of frames) monitor.onRawFrame(`10:00:00.000 R 1DFF0614 ${[...f].map(b => b.toString(16).padStart(2, '0')).join(' ')}`)
+  const starlink = published.find(v => v.path === 'electrical.czone.Starlink.current')
+  assert(starlink, 'Starlink current published')
+  assert.strictEqual(starlink.value, 3.1)
+  const routes = {}
+  monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
+  let out
+  routes['/monitor/items']({ query: {} }, { json: v => { out = v } })
+  assert.strictEqual(out.items.find(i => i.name === 'Starlink').readings[0].value, 3.1)
+  monitor.stop()
+}
+
 console.log('Monitor tests passed')

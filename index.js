@@ -1058,7 +1058,8 @@ module.exports = function (app) {
           circuits: mapping
             ? mapping.circuits.map(c => ({
                 ...c,
-                state: runtimeState.get(c.name) || null
+                state: runtimeState.get(c.name) || null,
+                current: monitor.valueAt(`electrical.czone.${c.slug}.current`)
               }))
             : []
         })
