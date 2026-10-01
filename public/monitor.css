@@ -35,16 +35,18 @@
 .mon-row.clickable { cursor:pointer; }
 .mon-row.unmapped { opacity:.5; }
 .mon-row.active { background:linear-gradient(90deg, color-mix(in srgb, var(--cat) 16%, transparent), transparent 70%); box-shadow:inset 3px 0 0 var(--cat); }
-.mon-row .status.on { color:color-mix(in srgb, var(--cat) 75%, white); }
-.mon-row .status.on .status-dot { background:var(--cat); box-shadow:0 0 12px color-mix(in srgb, var(--cat) 70%, transparent); }
-.mon-chip { border:0; cursor:pointer; font:inherit; font-size:10px; }
-.mon-chip:hover { background:color-mix(in srgb, var(--cat) 22%, #152d44); color:#fff; }
-.mon-level { display:inline-block; align-self:center; width:70px; height:6px; border-radius:3px; background:#152d44; overflow:hidden; }
-.mon-level span { display:block; height:100%; border-radius:3px; background:var(--cat); }
-/* Value box: same footprint as the ON/OFF toggle */
-.mon-value { min-width:78px; min-height:42px; padding:9px 13px; border:1px solid rgba(148,193,235,.22); border-radius:12px; background:#172b40; font-weight:750; font-size:15px; display:flex; align-items:baseline; justify-content:center; gap:4px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+/* LIVE stays the webapp's green on every group: amber reads as a fault. */
+.mon-right { grid-column:3 / 5; display:flex; flex-direction:column; align-items:flex-end; gap:6px; min-width:0; }
+.mon-values { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+/* Value box: same footprint as the ON/OFF toggle; one per live reading */
+.mon-value { min-width:78px; min-height:42px; padding:8px 13px; border:1px solid rgba(148,193,235,.22); border-radius:12px; background:#172b40; font-weight:750; font-size:15px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.mon-value > span:first-child { display:flex; align-items:baseline; gap:4px; }
 .mon-value small { font-weight:500; font-size:11px; color:var(--muted); }
-.mon-row.clickable:hover .mon-value { border-color:color-mix(in srgb, var(--cat) 55%, transparent); }
+.mon-value.clickable { cursor:pointer; }
+.mon-value.clickable:hover { border-color:color-mix(in srgb, var(--cat) 55%, transparent); }
+.mon-value.active { border-color:var(--cat); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--cat) 40%, transparent); }
+.mon-level { display:block; width:100%; height:4px; border-radius:2px; background:#0c2135; overflow:hidden; }
+.mon-level span { display:block; height:100%; border-radius:2px; background:var(--cat); }
 
 /* Trend panel */
 .mon-trend .section-head .mon-close { margin-left:auto; cursor:pointer; }
@@ -74,7 +76,9 @@
   .section-head .mon-pill { margin-left:0; }
   .mon-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .mon-chart canvas { height:230px; }
-  .mon-row .control { justify-content:flex-end; }
+  .mon-right { grid-column:3; }
+  .mon-row.multi .mon-right { grid-column:2 / 4; align-items:stretch; }
+  .mon-row.multi .mon-values { justify-content:flex-start; }
   .mon-row .arrow { display:none; }
   .mon-row .mon-icon { width:26px; height:26px; font-size:13px; }
 }

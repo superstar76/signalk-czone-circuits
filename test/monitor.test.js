@@ -182,6 +182,10 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   assert.strictEqual(d.module, 0x14)
   assert.strictEqual(d.slots[7].channel, 15)
   assert.strictEqual(d.slots[7].amps, 3.1)
+  // Bench Output Interface: current byte 1 on an OFF output (level 0x0400) reads 0 A.
+  const bench = decodeCurrentPacket(130817, Buffer.from('27990001' + '010004' + '01e807' + '0100e8'.repeat(6), 'hex'))
+  assert.strictEqual(bench.slots[0].amps, 0)
+  assert.strictEqual(bench.slots[1].amps, 0.1)
   // 130817 carries page before module (bench Output Interface 0x01).
   assert.strictEqual(decodeCurrentPacket(130817, Buffer.from('27990001' + '0100e8'.repeat(8), 'hex')).module, 0x01)
 
@@ -208,6 +212,39 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   let out
   routes['/monitor/items']({ query: {} }, { json: v => { out = v } })
   assert.strictEqual(out.items.find(i => i.name === 'Starlink').readings[0].value, 3.1)
+  monitor.stop()
+}
+
+// --- Sensors straight off the bus (bench ZCF 1 Oct 2026): Ruuvi Tag =
+//     temperature instance 102 source 2, Victron Temp Sensor = instance 101
+//     source 1. Virtual "Victron Shunt" (instance 1) must ignore the Meter
+//     Interface's "5V System - MI", which is also instance 1.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sens-'))
+  const zcfFile = path.join(dir, 'installation.zcf')
+  fs.copyFileSync(path.join(__dirname, 'fixtures', 'TestBench-2026-10-01.zcf'), zcfFile)
+  const sk = {
+    'electrical.batteries.1.voltage': {
+      value: 5.02, $source: 'n2k-on-ve.can-socket.9',
+      values: { 'n2k-on-ve.can-socket.9': { value: 5.02 }, 'n2k-on-ve.can-socket.224': { value: 13.31 } }
+    }
+  }
+  const monitor = createMonitor({ getSelfPath: p => sk[p], debug: () => {} })
+  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  monitor.learnModuleSource('10:00:00.000 R 1CFF0409 27 99 04 0E 00 00 00 00')
+  // 130312 (0x1FD08) from 0xE0: SID 0, instance 102, source 2, 295.15 K
+  monitor.onRawFrame('10:00:01.000 R 15FD08E0 00 66 02 4B 73 FF FF FF')
+  // 130316 (0x1FD0C): instance 101, source 1, 288.150 K
+  monitor.onRawFrame('10:00:01.000 R 15FD0CE0 00 65 01 96 65 04 FF FF')
+  const routes = {}
+  monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
+  let out
+  routes['/monitor/items']({ query: {} }, { json: v => { out = v } })
+  const by = Object.fromEntries(out.items.map(i => [i.name, i]))
+  assert.strictEqual(by['Ruuvi Tag'].readings[0].value, 295.15)
+  assert.strictEqual(by['Victron Temp Sensor'].readings[0].value, 288.15)
+  assert.strictEqual(by['Victron Shunt'].readings[0].value, 13.31)
+  assert.strictEqual(by['5V System - MI'].readings[0].value, 5.02)
   monitor.stop()
 }
 

@@ -1,7 +1,16 @@
 # signalk-czone-circuits
 
-Signal K control plugin for CZone circuits and Modes using a dynamically parsed
-CZone ZCF configuration.
+Signalk CZone circuit control using dynamically parsed ZCF configuration and Signalk NMEA 2000 output  The PGNs have been reverse engineered, so its a best guess effort.  
+
+Requirements: CZone digital switching installed, and NMEA interface capable of reading and writing from the NMEA interface.
+
+Beta testing has been done on Cerbo GX running signalk, and Ubuntu running signalk with YachtDevices YDNU-02.
+
+Webapp
+<img width="3088" height="1690" alt="Image" src="https://github.com/user-attachments/assets/0ab0bd8d-9447-4d18-80e5-d7a4418014b7" />
+
+Plugin config
+<img width="1280" height="1702" alt="Image" src="https://github.com/user-attachments/assets/0405b364-6e60-4bbe-b230-72adec323239" />
 
 **Current release:** `0.1.0-beta.19`
 

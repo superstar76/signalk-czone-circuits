@@ -121,31 +121,35 @@
 
   // Rows reuse the webapp's own circuit-row classes so Monitoring looks like
   // the circuit list: name + subtitle, tags, status dot, value box, arrow.
-  function chip (item, r) {
+  // Group names as shown (the catalogue keeps its own keys).
+  const GROUP_LABEL = { 'Circuit current': 'Circuits' }
+  const groupLabel = g => GROUP_LABEL[g] || g
+
+  // One value box per live reading (e.g. battery V / A / %), each opens its trend.
+  function valueBox (item, r) {
     const f = fmt(r.unit, r.value, r.path)
-    return `<button class="tag mon-chip" data-item="${esc(item.id)}" data-key="${esc(r.key)}" title="Trend ${esc(r.label)}">${esc(r.label)} ${f.text}${f.unit ? ' ' + esc(f.unit) : ''}</button>`
+    const on = chart.open && chart.item && chart.item.id === item.id && chart.key === r.key ? 'active' : ''
+    const level = r.unit === 'ratio' && typeof r.value === 'number' ? `<span class="mon-level"><span style="width:${Math.max(0, Math.min(100, r.value * 100))}%"></span></span>` : ''
+    const attrs = r.series ? `data-item="${esc(item.id)}" data-key="${esc(r.key)}" title="${esc(r.label)}: show trend"` : `title="${esc(r.label)}"`
+    return `<div class="mon-value ${on} ${r.series ? 'clickable' : ''}" ${attrs}><span>${f.text}<small>${esc(f.unit)}</small></span>${level}</div>`
   }
 
   function row (item) {
     const p = primary(item)
     const g = groupOf(item)
-    const f = p ? fmt(p.unit, p.value, p.path) : { text: '—', unit: '' }
     const where = item.group === 'Circuit current' && item.outputs && item.outputs[0]
       ? `module ${Number(item.outputs[0].module).toString(16).padStart(2, '0').toUpperCase()} / ch ${item.outputs.map(o => o.channel).join(', ')}`
       : item.instance !== undefined ? `instance ${item.instance}`
         : item.module ? `module ${Number(item.module).toString(16).padStart(2, '0').toUpperCase()}${item.input !== undefined ? ` / input ${item.input + 1}` : ''}` : ''
-    const sub = item.mapped ? (where || g) : (item.note || `Waiting for ${(p && p.candidates[0]) || 'a Signal K path'}`)
-    const others = item.readings.filter(r => r !== p && r.series)
-    const level = p && p.unit === 'ratio' && typeof p.value === 'number' ? `<span class="mon-level"><span style="width:${Math.max(0, Math.min(100, p.value * 100))}%"></span></span>` : ''
-    const tags = `${level}${others.map(r => chip(item, r)).join('')}`
+    const sub = item.mapped ? (where || groupLabel(g)) : (item.note || `Waiting for ${(p && p.candidates[0]) || 'a Signal K path'}`)
     const live = item.mapped
+    const shown = live ? item.readings.filter(r => r.path) : (p ? [p] : [])
     const active = chart.open && chart.item && chart.item.id === item.id ? 'active' : ''
     const clickable = p && p.series
-    return `<div class="circuit mon-row ${live ? '' : 'unmapped'} ${active} ${clickable ? 'clickable' : ''}" style="--cat:${groupVar(g)}" ${clickable ? `data-item="${esc(item.id)}" data-key="${esc(p.key)}"` : ''}>
+    return `<div class="circuit mon-row ${shown.length > 1 ? 'multi' : ''} ${live ? '' : 'unmapped'} ${active} ${clickable ? 'clickable' : ''}" style="--cat:${groupVar(g)}" ${clickable ? `data-item="${esc(item.id)}" data-key="${esc(p.key)}"` : ''}>
       <span class="mon-icon">${groupIcon(g)}</span>
       <div class="circuit-name"><strong>${esc(item.name)}</strong><small>${esc(sub)}</small></div>
-      <div class="tags">${tags}</div>
-      <div><div class="status ${live ? 'on' : ''}"><span class="status-dot"></span>${live ? 'LIVE' : 'NOT ON BUS'}</div><div class="control"><div class="mon-value">${f.text}<small>${esc(f.unit)}</small></div></div></div>
+      <div class="mon-right"><div class="status ${live ? 'on' : ''}"><span class="status-dot"></span>${live ? 'LIVE' : 'NOT ON BUS'}</div><div class="mon-values">${shown.map(r => valueBox(item, r)).join('')}</div></div>
       <span class="arrow">${clickable ? '›' : ''}</span></div>`
   }
 
@@ -163,7 +167,7 @@
       const live = list.filter(i => i.mapped).length
       if (g === 'Circuit current') list.sort((a, b) => (primary(b).value || 0) - (primary(a).value || 0) || sortByName(a, b))
       else list.sort(sortByName)
-      return `<div class="mon-subhead" style="--cat:${groupVar(g)}"><span class="mon-icon">${groupIcon(g)}</span><strong>${esc(g)}</strong><span class="subtle">${live} of ${list.length} live</span></div>${list.map(row).join('')}`
+      return `<div class="mon-subhead" style="--cat:${groupVar(g)}"><span class="mon-icon">${groupIcon(g)}</span><strong>${esc(groupLabel(g))}</strong><span class="subtle">${live} of ${list.length} live</span></div>${list.map(row).join('')}`
     }).join('')
   }
 
