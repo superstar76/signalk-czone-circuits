@@ -247,6 +247,16 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   assert.strictEqual(by['Victron Temp Sensor'].readings[0].value, 288.15)
   assert.strictEqual(by['Victron Shunt'].readings[0].value, 13.31)
   assert.strictEqual(by['5V System - MI'].readings[0].value, 5.02)
+  // AC from the Meter Interface (source 9): PGN 127747 / 127744, bench frames.
+  monitor.onRawFrame('10:00:02.000 R 19F30309 08 00 3F 09 FF FF F4 01')
+  monitor.onRawFrame('10:00:02.000 R 19F30309 07 01 12 09 FF FF F4 01')
+  monitor.onRawFrame('10:00:02.000 R 19F30009 08 00 00 00 09 00 00 00')
+  // Same instance from another device is ignored for a wired meter.
+  monitor.onRawFrame('10:00:02.000 R 19F303E0 08 00 10 27 FF FF F4 01')
+  routes['/monitor/items']({ query: {} }, { json: v => { out = v } })
+  const ac = name => Object.fromEntries(out.items.find(i => i.name === name).readings.map(r => [r.key, r.value]))
+  assert.deepStrictEqual(ac('Power In'), { voltage: 236.7, current: 0, power: 9, frequency: 50 })
+  assert.deepStrictEqual([ac('Power Out').voltage, ac('Power Out').frequency], [232.2, 50])
   monitor.stop()
 }
 
