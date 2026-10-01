@@ -1,27 +1,30 @@
 # CZone ↔ Signal K — Combined Handover
 
-**Date:** 1 October 2026
+**Updated:** 1 October 2026 (evening)
 **Owner:** Matthew Duckett (Cleagh Marine Electrical)
-**Supersedes:** `HANDOVER-NOTES.md` (27 Feb 2026) and `czone-current-monitoring-handover.md` (28 Feb 2026)
+**Supersedes:** the 1 October (morning) version, `HANDOVER-NOTES.md` (27 Feb 2026) and `czone-current-monitoring-handover.md` (28 Feb 2026)
 
-This document brings together:
+Companion documents in this folder:
 
-- the February 2026 work on our own plugin (`signalk-czone-switch-control`, "CZone Control");
-- the September/October 2026 bench work with Matt Mitchell's plugins (`signalk-czone-circuits` and `signalk-czone`);
-- what we are building next, and how it goes back to the author.
+- `BRIEF-FOR-MATT.md` — what the author needs to resolve in his code.
+- `FORK-CHANGES.md` — what our fork adds, file by file, for the pull request.
+- `ZCF-FORMAT.md` — ZCF table layouts (circuits, meters, meter settings, inputs).
 
 ---
 
-## 1. Where we are (summary)
+## 1. Where we are
 
 | Area | Status |
 |---|---|
-| Circuit control from Signal K (author's `signalk-czone-circuits`) | **Working on bench** (beta.15): commands hold, state feedback from plugin, display and physical switch |
-| Root cause of the "turns off after ~10 s" fault | **Found and fixed**: command trailer byte must be `0x08` (see §3) |
-| ZCF circuit parser | **New structural parser written and validated** on 5 vessels against the CZone Configuration Tool (§4). Delivered as `zcf-circuit-parser.zip`, not yet merged by author |
-| Per-circuit current (`signalk-czone`) | Decoding works, but **circuit mapping is wrong** because it uses the old ZCF parser (§6) |
-| Monitoring + trending in the author's webapp | **Planned** (§8). Reuses the February design and storage format |
-| Victron GX Switches pane | **Planned**: optional `electrical.switches.*` mirror (§9) |
+| Circuit control (Matt's `signalk-czone-circuits`) | **Working** on the bench (beta.20): commands hold (trailer `0x08`), state feedback from display, wall switch and webapp |
+| Structural ZCF circuit parser | **Adopted by Matt** as `lib/zcf-circuit-table.js` (his main, 1 Oct). Bench now shows all 6 circuits with correct channels. One rule missing (see `BRIEF-FOR-MATT.md`) |
+| Monitoring tab in the webapp | **Working on the bench** (our fork): batteries, AC, temperatures from the ZCF; nothing configured by hand |
+| Circuit current | **Working**: decoded from PGN 130822/130817, shown on the ON button, trend from the › arrow |
+| Trending | **Built, untested on hardware**: needs an SD card or USB stick in the Cerbo (Pi/PC: Signal K data folder) |
+| Victron switch pane | **Working both ways** on Venus OS 3.80, one card per CZone category, amps in the label |
+| Switch inputs (Signal Interface) | **Not started**: message carrying input state not identified yet |
+| RGB lighting | **Parked**: no CZone RGB circuit in any ZCF we have |
+| Pull request to Matt | **Not yet**: fork `monitoring` branch is up to date with his main (beta.20 + README) |
 
 ---
 
@@ -31,308 +34,221 @@ This document brings together:
 
 | Item | Detail |
 |---|---|
-| GX | Cerbo GX `einstein`, `192.168.1.226` / `venus.local`, Venus OS Large |
-| Signal K | 2.27.0, Node v24.18.1, config dir `/data/conf/signalk` |
-| NMEA 2000 | CZone backbone on `vecan0`; Signal K canboatjs source address `0x65` |
-| CZone bench modules | Output Interface `0x01`, Signal Interface `0x02`, Meter Interface `0x04`, Display `0x10` |
-| Bench circuits | Buzzer `0x05`, Light 1–5 `0x06`–`0x0A` (IDs proven live) |
-| Bench ZCF | `TestBench.zcf` (also in the author's repo as a test fixture) |
+| GX | Cerbo GX `einstein`, `192.168.1.226` / `venus.local`, Venus OS **3.80** Large |
+| Signal K | 2.27.0, config dir `/data/conf/signalk` |
+| NMEA 2000 | CZone backbone on **`vecan0`** (there is no `can1`) |
+| CZone modules | Output Interface `0x01` (src 0), Signal Interface `0x02` (src 0x1B), Meter Interface `0x04` (src 9), Display `0x10` (src 1) |
+| Cerbo's own N2K addresses | 0x65 (temperatures), 0xE0 / 0xE1 (battery / shunt) |
+| Circuits | Buzzer `0x05`, Light 1–5 `0x06`–`0x0A` |
+| Meters (ZCF 1 Oct) | Victron Shunt inst 2 (virtual), 5V System - Victron inst 3 (virtual, not yet sent by Cerbo), House Battery inst 0 (MI), 5V System - MI inst 1 (MI), Power In AC inst 0 (MI), Power Out AC inst 1 (MI) |
+| Senders (ZCF 1 Oct) | Ruuvi Tag: temperature inst 102, source Inside (sent by Cerbo); Victron Temp Sensor: inst 101, source Outside (sent by Cerbo) |
+| Inputs | Switch 1–5 on Signal Interface; Tank Level (unconfigured sender) |
 
 ### Repositories
 
-| Repo | Purpose |
+| Repo | Use |
 |---|---|
-| `github.com/mattsmitchell/signalk-czone-circuits` | Author's circuit **control** plugin + webapp (beta.15 installed on bench) |
-| `github.com/mattsmitchell/signalk-czone` | Author's read-only **current** plugin (PGN 130822/130817) |
-| Our fork (to create) | `signalk-czone-circuits`, branch `monitoring` |
+| `github.com/mattsmitchell/signalk-czone-circuits` | Matt's plugin + webapp (`main`, beta.20) |
+| `github.com/superstar76/signalk-czone-circuits`, branch **`monitoring`** | **Our fork**: Matt's main + our work. The bench installs from here |
+| `github.com/mattsmitchell/signalk-czone` | Matt's read-only current plugin. Now uses the structural parser too (commit `e67c29d`); not needed if our fork is merged |
 
-### February plugin (ours, retired as a separate plugin)
-
-- Name: `signalk-czone-switch-control`, display name "CZone Control", icon: "CZ" logo.
-- Files: `index.js`, `public/index.html`, `public/icons.js`, `public/icon.png`, `schema.json`, plus `/data/rc.local` for the SD card remount.
-- Features worth carrying forward: Monitor tab, SD card trending, trend chart window, path auto-discovery, favourites tabs, themes, icon library.
+Your fork's `main` branch is untouched and behind Matt; ignore it (or *Sync fork → Update branch*).
 
 ---
 
 ## 3. CZone protocol — proven facts
 
-All commands are proprietary PGN **65280** (`0xFF00`), payload `27 99 …` (BEP/CZone manufacturer code).
-
-### Command frame
+### Commands (PGN 65280)
 
 ```
 27 99 <circuitId> 00 <value> <deviceId> <operation> <trailer>
 ```
 
-| Byte | Meaning |
+- `operation`: `F1` ON, `F2` OFF, `40` completion, `FC` level; dimmer ON `F5 95 43`, OFF `F5 95 42`.
+- `deviceId`: a CZone dipswitch address. Matt picks an unused one from the ZCF (bench `0x03`).
+- **`trailer 0x08` = command holds.** `0x00` holds only while the device in `deviceId` is live (cause of the original ~10 s revert).
+
+### Status and telemetry
+
+| PGN | Meaning |
 |---|---|
-| `circuitId` | Circuit's runtime ID from the ZCF circuit table |
-| `value` | Level % for `FC` (dimmer level), else `00` |
-| `deviceId` | Sending device's CZone **dipswitch** address (a display sends its own, e.g. bench display `0x10`) |
-| `operation` | `F1` ON, `F2` OFF, `40` completion/release, `FC` level, dimmer: `F5 95 43` = ON, `F5 95 42` = OFF |
-| `trailer` | **`0x08`** = command holds regardless of sender. `0x00` = holds only while the device named in `deviceId` is live on the bus |
+| 65281 | Command acknowledgement from the output module |
+| 65284 (`0xFF04`) | Per-module circuit on/off bitmap, bytes 4–7 LE; load-table masks map circuits to bits |
+| 0xFF04/15/16/1C | Module status frames; **byte 2 = module dipswitch**, used to learn module → N2K source address |
+| **130822** (DC modules) | Output table, fast packet, 28 bytes: `27 99 <module> <page>` + 8 × `[current][level u16 LE]` |
+| **130817** (AC modules **and** the Output Interface) | Same, but `27 99 <page> <module>` |
 
-Sequences:
+Output table details:
 
-- **Switch:** `F1` (or `F2`) followed by `40` completion.
-- **Dimmer:** `F5`, `95`, `43` (ON) or `F5`, `95`, `42` (OFF), then `FC` for level.
-- **Mode activation:** `27 99 <modeId> 00 00 <deviceId> F1 <trailer>`.
+- Slot n on page p = output channel `p*8 + n` (same numbering as the ZCF circuit outputs).
+- Current byte = **0.1 A**. Level word: `0x0400` off, `0x07E8` on, `0x0400 + ‰` dimmed.
+- **Bench Output Interface reports current byte 1 (0.1 A) on every output, on or off.** We treat level = off as 0 A. On SugarShack's COIs off channels read 0 and on channels read real loads (Starlink 3.1 A, router 1.4 A, AIS 0.3 A).
 
-### The 10-second revert — proven on the bench (30 Sep 2026)
+### Standard PGNs we decode ourselves
 
-| Byte 5 (sender) | Sender live on bus? | Trailer | Result |
+| PGN | Use |
+|---|---|
+| 130312 / 130316 | Temperature: instance, source |
+| 130314 | Pressure: instance, source |
+| 127505 | Tank level: instance + fluid type nibble |
+| 127508 / 127506 | Battery V / A / temp, SoC (first fast-packet frame) |
+| 127744 / 127747 | AC phase A current/power, voltage/frequency; "connection" = AC meter instance |
+
+---
+
+## 4. ZCF format (full detail in `ZCF-FORMAT.md`)
+
+- **Circuit table:** structural walk, records = circuit / mode / logic / internal. Matt has adopted this.
+- **Meters table:** `[ac][meterId][module][nameLen][name]`. **`meterId` is not the NMEA instance.** Virtual meters are numbered 1..n; a wired meter's id is its input on the module.
+- **Meter settings tables** (straight after the Meters table): DC (record size 86 or 92), then AC (65). Each record = `[nmeaInstance][meterId][module]…`. This is where the instance the Configuration Tool shows lives.
+  - Confirmed live: Victron Shunt → 2; 5V System - MI → 1.
+  - All DC and AC meters in all 8 sample files resolve through these tables.
+  - The Pad's House Battery is instance 239.
+- **Inputs table:** `[input][module][wiring][kind][flags][a][b]` + body (47 or 53 bytes) + name + calibration points.
+  - temperature: `a` = source, `b` = instance;
+  - pressure: `a` = source, `b` = instance;
+  - tank: `a` = fluid type, `b` = instance;
+  - module 0 = third-party sender.
+
+---
+
+## 5. What runs where (our fork)
+
+### Monitoring (`lib/monitor/`, `public/monitor.*`)
+
+1. On start, the ZCF is parsed into a catalogue: meters (batteries, AC), senders (temperature, pressure, tanks), switch inputs, and circuit currents.
+2. Values come from, in order:
+   - **values the plugin decodes itself:** circuit currents, and sensors/meters by NMEA instance;
+   - **Signal K paths**, filtered to the right N2K source for meters wired to a CZone module (module → source learned from module status frames).
+3. **Third-party sensors and meters** (ZCF module 0) are read **straight off the CAN bus with `candump`** on `vecan0`, kernel-filtered to the sensor PGNs. Reason: Signal K does not pass the GX's own transmissions (e.g. Cerbo temperatures, shunt) to plugins. It runs only when the ZCF has a third-party sender or virtual meter. While it runs, those readings never fall back to Signal K's `electrical.batteries.<n>`, which on a GX uses VRM instances, not N2K instances.
+4. Sampled every 10 s (setting: 5 / 10 / 15 / 30 / 60 s), buffered and written once a minute. See "Trend storage" below.
+
+**Trend storage:**
+
+| Platform | Location |
+|---|---|
+| Victron GX | SD card or USB stick only (never internal flash) |
+| Pi / PC | Signal K data folder |
+| Any | The "Trend folder" setting overrides both |
+
+Plain CSV files, no database. Nothing is built or held without storage: with no card, samples are dropped each minute and memory use is a few numbers per point.
+
+| Tier | File | Contents | Used by |
 |---|---|---|---|
-| `08`, `24`, `65` | No | `00` | Reverts after ~10.4 s |
-| `10` (bench display) | **Yes** | `00` | Holds |
-| `10`, `65`, `24` | either | `08` | Holds |
-| `24`, circuit with switch-input control only | No | `08` | Holds |
-| SugarShack `24` (its Wireless Interface) | Yes | `00` | Held 39 s and 81 s (log capture) |
+| Full detail | `<storage>/signalk-czone/trends/<series>/<YYYY-MM-DD>.csv` | `time,value` (February format), **written on change**: when the value differs, plus the last unchanged sample before it, and at least every 10 minutes | 1 h and 24 h charts |
+| Summary | `<series>/summary/<YYYY-MM>.csv` | `bucket,min,avg,max` per 10 minutes, built from every sample | 7 d, 31 d, 90 d, 1 y charts (average line with a min–max band) |
 
-The author's plugin had hard-coded `0x24` (SugarShack's WI 01) and `0x08` (SugarShack's Touch 10). They were live on his boat, so `00` worked there and nowhere else. Beta.13+ uses trailer `08` and picks an unused dipswitch from the ZCF (bench: `0x03`).
+- **Retention:** nothing is deleted by age by default ("Keep full-detail trend data for" can cap it at 31 / 90 / 365 days).
+- **Space guard (hourly):** when free space drops below 5% or 200 MB on a card (10% or 1 GB on a shared disk), the oldest full-detail days go first; summaries only when no old full detail is left. Today's file and this month's summary are never removed, so recording never stops.
+- **Sizing:** 200 points at 10 s is at most 12.6 GB/year of full detail (every sample different; write-on-change makes it far less in practice) plus 0.34 GB/year of summaries. **Minimum card: 16 GB.**
 
-### Other PGNs
+**UI:**
 
-| PGN | Meaning (proven) |
+- **Monitoring tab:** one section per group; a value box per live reading; click a box for its trend.
+- **Circuit list:** the ON button shows amps; the › arrow opens that circuit's current trend.
+
+### Victron switch pane (`lib/victron/`)
+
+- The plugin registers `com.victronenergy.switch.czone_circuits` on the Cerbo's system D-Bus (VRM device instance from localsettings; bench: 100).
+- One `/SwitchableOutput/<slug>/…` per ZCF circuit:
+  - State, Status, Name, Current;
+  - Dimming for dimmers;
+  - Settings: Type (toggle / momentary, or dimmable), Group = CZone category, CustomName, ShowUIControl.
+- **Pane → CZone:** calls the same functions as the webapp buttons (hook in `index.js`), so "Allow sending" still applies. A refusal snaps the switch back.
+- **CZone → pane:** from the plugin's `electrical.czone.<slug>.switch.state/brightness` deltas.
+- **Amps in the label** while on ("Light 1 · 1.5 A"), because Venus OS doesn't display `/Current` yet (Victron community request, 28 Sep 2026). This is a setting.
+- Pane-side renames, types and groups are kept in `victron-switches.json` in the plugin data folder.
+
+### Settings added (plugin config panel)
+
+| Setting | Default |
 |---|---|
-| 65281 (`0xFF01`) | **Command acknowledgement** from the output module, e.g. `27 99 00 41 01 51 28 00`. *Not* current data (Feb hypothesis retired) |
-| 65284 (`0xFF04`) | **Circuit on/off status bitmap**: `27 99 <module> <moduleType> <b4 b5 b6 b7>`, bytes 4–7 = uint32 LE. Bench OI: bit = channel. *Not* serial/firmware (Feb label retired) |
-| 65288 / 65294 | Display presence broadcasts (`27 99 00 10 …`, `27 99 64 00 00 10 02 40`). Not needed for control |
-| 130822 / 130817 | Per-circuit **DC / AC current**, fast packet, broadcast without polling. Decoded by `signalk-czone` |
-| 65290 / 130816 / 65291 | Configuration read (claim / DataBlock / ack), used by "Read From Network" |
-| 130825 | Ruled out as a current source (Feb) |
+| Show CZone circuits in the Victron switch pane | off |
+| Show circuit current in the switch label | on |
+| Trend folder (optional) | blank = automatic |
 
-No polling is needed for current. The February plan to capture a display's "poll request" is **no longer required**.
+### Diagnostics routes (`/plugins/signalk-czone-circuits/…`)
 
----
-
-## 4. ZCF format findings
-
-### Module table (after the vessel name)
-
-`u32 tableLength | u8 count | 00 | 05 | record × count`, record = `[dipswitch][type][flags][nameLen (bit 7 = flag)][name] + 1 byte`.
-Dipswitch strings read **LSB-first**: `10000000` = `0x01`, `00000001` = `0x80`, `11000000` = `0x03`.
-
-### Circuit table (structural parser, `lib/zcf-circuits.js`)
-
-```
-u32 tableLength | u16 recordCount | u8[4] header | record × recordCount
-record:
-  u8  circuitId
-  u32 flags        0x0400 logic block ("LB …"), 0x0100 Mode
-  u16 category     0x0020 DC, 0x0040 AC, 0x0010 lighting, 0x0001 electronics; 0 on Modes
-  u8  nameLen, name (UTF-8, stored with trailing spaces)
-  u32 controlsLen, u16 controlCount, controls (skipped by length)
-  u32 outputsLen,  u16 outputCount, outputs: ch, module, u16 level (0.1 %), u8, +9 bytes if level & 0x0400
-```
-
-Record kinds: `circuit`, `mode`, `logic`, and `internal` (a zero-control circuit sharing a name with a controllable one, e.g. Meitaki "Audible Alarm" `0x01`/`0x02` beside the real `0x20`).
-
-**Channel numbering**
-
-| Module | Mapping |
+| Route | Shows |
 |---|---|
-| CXP | A.1–A.4 = 0–3, B.1–B.10 = 4–13, C.1–C.6 = 14–19 |
-| COI | DC5–DC16 = 0–11, DC1–DC4 = 12–15 |
-| ACOI | ACn = n − 1 |
-| Output Interface, Contact 6 | n − 1 |
-| Virtual switches | VSn = `0x1F` + n |
-
-**Validation against the Configuration Tool**
-
-| Vessel | Old parser | New parser | Result |
-|---|---|---|---|
-| TestBench | 5 | 6 | Exact; IDs proven live |
-| Compass Rose | 21 | 35 | Exact; 26 loads' module + channel correct |
-| Sel Citron (02.04.25 file) | 100 | 102 | All common names match; 76/76 modules correct |
-| The Pad (04.08.26) | 53 | 76 + 2 modes | Exact; 53/53 modules correct. **Customer file, not in the author's repo** |
-| Meitaki | 103 | 107 + 8 modes | Exact name list; 38/38 module + channel correct |
-| SugarShack | 108 | 110 + 4 modes | Mode IDs match live captures |
-
-Old-parser defects the new one fixes:
-
-- circuits missing;
-- **each circuit given the previous circuit's module and channel**;
-- circuit ID 0 for names picked up from other tables;
-- Modes not separated from circuits.
-
-### Load table (status masks)
-
-The TestBench file carries a per-load 32-bit mask before each name, then output number and module. The masks match the 65284 bitmap exactly (Light 1 `0x01` … Light 5 `0x10`, Buzzer `0x20`; Light 5 drives both, hence `0x30`). The author implemented this in beta.15.
-
-### Meters and Inputs tables (not yet parsed)
-
-Located in The Pad's ZCF:
-
-- **Inputs/sensors:** tanks and temperatures with calibration curves, and digital inputs (BMS Alarm, Watermaker Running …).
-- **Meters:** name + instance-like number (Start Battery - Port `02`, House Battery `03`, Start Battery - STBD `04`, 12V House `09`, Solar `05` …).
-
-Needs ground truth from the Configuration Tool Meters and Inputs tabs before parsing (§10, step 2).
+| `/monitor/items` | The catalogue with resolved values |
+| `/monitor/modules` | Learned module → source addresses |
+| `/monitor/bus` | Frames reaching the plugin, by PGN and source; candump status; sensors seen vs wanted |
+| `/monitor/debug?path=` | What the plugin sees for one Signal K path |
+| `/trend/status`, `/trend?path=&range=` | Trend storage and data |
+| `/victron/status` | Switch pane service state and the last 10 pane requests |
 
 ---
 
-## 5. Author's plugin — current state (beta.15) and open items
+## 6. Lessons from this session
 
-Working on the bench:
-
-- control, with trailer `08` and an automatically chosen device ID;
-- webapp and PUT paths send the same full sequences;
-- dimmer ON is `F5 95 43`;
-- module table parse;
-- load-mask status: the UI follows the plugin, the display and physical switches.
-
-Open items for the author:
-
-1. **Adopt the structural circuit parser** (`zcf-circuit-parser.zip`): adds the missing circuits (e.g. bench Buzzer), fixes module/channel, drops circuit-ID-0 entries, separates Modes. SugarShack group circuits (All Lights On, Welcome Home, Wireless Relay Buttons) are ordinary multi-output circuits in the file.
-2. **Same parser fix in `signalk-czone`** (§6).
-3. Bench tests read `/mnt/data/TestBench.zcf`; point them at `test/fixtures/`.
-4. Module table: header byte = device count and each record has 1 trailing byte. Could read exactly instead of resyncing (works as is).
-5. Optional `electrical.switches.*` mirror (§9).
+1. **Don't trust "instance-looking" bytes.** The meter list byte matched the bus by coincidence on the first bench file (House Battery 0). The second meter (Victron Shunt) exposed it.
+2. **Signal K plugins don't see the GX's own N2K output.** Cerbo-sent temperatures and shunt data only reach a plugin via `candump` (or Signal K's dbus-sourced paths, which use VRM instances).
+3. **Signal K doesn't map 127744/127747** (AC phase A). Decode them yourself.
+4. **Signal K PUT via `app.putSelfPath`** didn't switch circuits on the bench; calling the plugin's own send functions does.
+5. Venus OS gui-v2 prefixes a switch with the device name unless `Settings/CustomName` is set.
+6. Spawning a child process: never `kill()` when `pid` is 0/undefined. Kill(0) hits the whole process group, i.e. Signal K.
+7. GitHub web upload: nothing happens until **Commit changes**. Hidden files (`.gitignore`) may not upload from Windows.
 
 ---
 
-## 6. `signalk-czone` current mapping bug
+## 7. Next steps
 
-On Compass Rose, **21 of 21** current mappings point at the previous circuit's output (e.g. Anchor Light reads AFT Outlets' current: module 1 / ch 17 instead of module 2 / ch 5).
-
-**To confirm before raising with the author:** on Compass Rose, switch on only AFT Outlets and see which `electrical.czone.*.current` path moves. If it's `Anchor_Light.current`, the bug is confirmed.
-
-Fix: use the structural parser's `outputs[].module/channel`.
-
----
-
-## 7. February 2026 learnings — what carries forward
-
-### Carry forward
-
-- **SD card storage.** The SD card is `/dev/mmcblk0p1` on `/run/media/mmcblk0p1` (vfat); `mmcblk1` is the internal eMMC. Detection = scan `mount` for `mmcblk0`, exclude system paths, fall back to `/run/media/*`, `/media/*` and known paths. Never write trends to `/data` (flash wear).
-- **SD permissions.** Signal K runs as a non-root user, so the card needs remounting `rw,umask=0000` at boot via `/data/rc.local`:
-  ```sh
-  if mount | grep -q mmcblk0p1; then
-    umount /run/media/mmcblk0p1 2>/dev/null
-    mount -o rw,umask=0000 /dev/mmcblk0p1 /run/media/mmcblk0p1
-  fi
-  ```
-- **Trend file format.** `<SD>/signalk-czone/trends/<path_with_unsafe_chars_replaced>/<YYYY-MM-DD>.csv`, lines `timestamp_ms,value`. **Keep identical** so existing data carries over.
-- **Trend API.** `GET …/api/trend?path=&range=1h|24h|7d|31d`, downsampled (targets ≈ 300/350/400 points); `GET …/api/trend/status` for availability. Retention 31 days (make it configurable).
-- **Monitor UI.** Category sections, reading cards with warn/danger bars, trend modal (canvas, multi-series, fullscreen, crosshair tooltip, min/max/avg). Landing tab = Monitor.
-- **Path auto-discovery.** Batteries, solar, alternators, inverters, tanks, environment/propulsion temps, GPS. Keep it for non-CZone data (Victron).
-- **Gotcha:** the `.hidden { display:none !important; }` class was missing and broke the trend modal. Check class names when porting.
-
-### Retired or superseded
-
-| February approach | Replaced by |
-|---|---|
-| Switch control via PGN 127502 / `electrical.switches.bank.*` | Native CZone 65280 commands (author's plugin) |
-| Anti-oscillation hysteresis on switch state | Real state from 65284 |
-| Polling a display for circuit current | Broadcast PGNs 130822/130817 |
-| Trend sampling via HTTP to `localhost:3000` | In-process Signal K values (works with security on, no HTTP per path) |
-| Appending to every CSV every 30 s | Buffered, batched writes (≈ 1 min) |
-| Manually configured monitor items | ZCF Meters/Inputs discovery + path discovery; manual add kept for extras |
-
-### Parked from February (later pull requests)
-
-Favourites tabs with backgrounds, theme presets, icon library and management, sequential switch type, GPS toggle, drag-to-reorder, custom trend date range, valve/position feedback graphics.
-
----
-
-## 8. What we are building next
-
-**Goal:** a **Monitor** section in the author's webapp (left sidebar) that automatically lists everything the CZone config monitors (meters and inputs), plus per-circuit current, with 31-day trending on the SD card. Built in parallel with the author and contributed as a pull request.
-
-### Design
-
-| Piece | Location (our files) | Notes |
+| # | Step | Who |
 |---|---|---|
-| ZCF Meters/Inputs parser | `lib/monitor/zcf-meters.js` | Names, types, instances; validated like the circuit parser |
-| Path mapping | `lib/monitor/paths.js` | Meter/input → existing Signal K paths (`electrical.batteries.<inst>.*`, `tanks.<type>.<inst>.*`, temperatures), plus `electrical.czone.<circuit>.current`; February path discovery for non-CZone items |
-| Trend storage | `lib/trends/` | Port of the February SD code: same folder/CSV format, batched writes, retention setting, "no SD card" status |
-| Routes | `lib/monitor/routes.js` | `/monitor/items`, `/monitor/values`, `/trend`, `/trend/status` under the plugin's router |
-| UI | `public/monitor.js` + small CSS block | Monitor view: cards by category, trend modal ported from February |
-
-**Touch points in the author's code: two lines.** One router mount in `index.js`, one nav entry in `public/index.html` (his nav is a plain list of `[view, icon, title, count]`).
-
-### Git workflow
-
-1. Fork `signalk-czone-circuits`; work on branch `monitoring`.
-2. Rebase onto each of his betas (the minimal touch points keep conflicts rare).
-3. Tests go in `test/`, using fixtures already in his repo (never customer ZCFs such as The Pad).
-4. Open a pull request when happy; he reviews, merges and ships it in his next beta.
+| 1 | SD card (16 GB or larger, high-endurance, FAT32) or USB stick in the bench Cerbo; set up the `/data/rc.local` remount; confirm trends draw | Matthew |
+| 2 | Switch inputs: `candump -ta vecan0 \| grep "1B "` while flicking Switch 1 and 2; then build the input display with "lighting-only inputs hidden" default + per-row show/hide | Matthew → Claude |
+| 3 | Configure 5V System - Victron instance 3 on the Cerbo (NMEA Reader); confirm it goes live | Matthew |
+| 4 | Send Matt `BRIEF-FOR-MATT.md` | Matthew |
+| 5 | Tailscale on the Compass Rose Cerbo (RUT200 can't run it); test monitoring, AC/tanks/pressure and dimmers there with sending off first | Matthew |
+| 6 | RGB: find a boat with a true CZone RGB circuit; ZCF + capture while changing colour | Matthew |
+| 7 | Pull request from `superstar76:monitoring` to `mattsmitchell:main` once Matt has reviewed `FORK-CHANGES.md` | Matthew |
+| 8 | Circuit currents stopped arriving once after ~10 h running (2 Oct), back after a restart. When it recurs, **don't restart**: open `/monitor/bus` and note `currentTables` (are frames still climbing? packets? decoded?) | Matthew → Claude |
+| 9 | Later: per-row show/hide on Monitoring, theme configurator (group colours are already CSS variables), February parked items (favourites, themes, icons) | — |
 
 ---
 
-## 9. Victron GX Switches pane (separate, small)
+## 8. Useful commands (bench)
 
-- Plugin setting (off by default): "Also publish circuits as standard Signal K switches".
-- Publishes `electrical.switches.czone_<slug>.state` (+ `dimmingLevel` 0–1), with `meta.displayName`, and PUT handlers that call the same send code. Circuits only: no modes, logic or internal records.
-- Victron side: the `signalk-to-venus` plugin auto-discovers `electrical.switches.*` and syncs both ways. **Its README says switch support is untested.** Bench-test first: publish one test switch from Node-RED and check the Switches pane.
-- Fallback if that fails: Node-RED virtual switch nodes (one per circuit, shared logic), or the plugin registering a Venus switch service itself.
+**Install our fork:**
 
----
-
-## 10. Next steps
-
-| # | Step | Who | Needs |
-|---|---|---|---|
-| 1 | Send `zcf-circuit-parser.zip` + findings to the author (§4–5) | Matthew | Done (zip delivered) |
-| 2 | Screenshots of **Meters** and **Inputs** tabs, fully expanded, for The Pad and Compass Rose | Matthew | Configuration Tool |
-| 3 | Confirm the `signalk-czone` mapping bug on Compass Rose (AFT Outlets test, §6), then raise with author | Matthew | Compass Rose |
-| 4 | Create fork + `monitoring` branch; share the repo link | Matthew | GitHub account |
-| 5 | Write + validate ZCF Meters/Inputs parser against step 2 | Claude | Step 2 |
-| 6 | Port SD detection + trend storage; confirm SD detection on the bench Cerbo (`/run/media/mmcblk0p1`) | Claude + Matthew | SD card in bench Cerbo, `rc.local` |
-| 7 | Monitor view in the author's webapp + trend modal | Claude | Steps 5–6 |
-| 8 | Bench test on Cerbo, then Compass Rose | Matthew | — |
-| 9 | Pull request to author | Matthew | Steps 5–8 |
-| 10 | Switches-pane test (`signalk-to-venus`), then propose the mirror setting | Matthew / author | — |
-| 11 | Later PRs: favourites, themes, icons, other parked items (§7) | — | — |
-
----
-
-## 11. Useful commands (bench)
-
-**Install or update the author's plugin (clean pull):**
 ```sh
 cd /data/conf/signalk
-rm -rf node_modules/signalk-czone-circuits
-npm install https://github.com/mattsmitchell/signalk-czone-circuits/tarball/main
+npm install https://github.com/superstar76/signalk-czone-circuits/tarball/monitoring
 svc -t /service/signalk-server
 ```
-Then hard-refresh the admin page (Ctrl+Shift+R). Ignore `npm audit` warnings; don't run `npm audit fix`.
 
-**Capture CZone commands + status:**
+Then hard-refresh the webapp with Ctrl+F5. Ignore the `npm audit` and `abstract-socket` warnings.
+
+**Capture to a file:**
+
 ```sh
-candump -td vecan0,00FF0000:03FFFF00,00FF0400:03FFFF00
+candump -ta vecan0 > /data/capture.log & sleep 20; kill $!
 ```
 
-**Capture all CZone proprietary traffic:**
-```sh
-candump -td vecan0,00FF0000:03FF0000,01FF0000:03FFFF00
+Copy it off from Windows PowerShell:
+
+```powershell
+scp root@192.168.1.226:/data/capture.log $env:USERPROFILE\Desktop\
 ```
 
-**Capture to a file for 30 s** (Venus has no `timeout`):
-```sh
-candump -tA vecan0,00FF0000:03FF0000,01FF0000:03FFFF00 > /data/capture.log & sleep 30; kill $!
-```
-Copy it off from Windows PowerShell with `scp root@192.168.1.226:/data/capture.log .`
+**Filtered captures:**
 
-**Manual circuit command** (Light 5 = `0A`, device ID `03`, trailer `08`):
+| What | Command |
+|---|---|
+| Temperatures | `candump -ta vecan0 \| grep -E "FD08\|FD0C" & sleep 10; kill $!` |
+| Battery status / DC detail | `candump -ta vecan0 \| grep -E "F214\|F212" & sleep 5; kill $!` |
+| Signal Interface only | `candump -ta vecan0 \| grep "1B " & sleep 30; kill $!` |
+
+**Switch pane from the shell:**
+
 ```sh
-cansend vecan0 1CFF0065#27990A000003F108
-cansend vecan0 1CFF0065#27990A0000034008
+dbus -y com.victronenergy.switch.czone_circuits / GetItems | head -40
+dbus -y com.victronenergy.switch.czone_circuits /SwitchableOutput/Light_1/State SetValue 1
 ```
-Use `F2` in place of `F1` for OFF.
 
 **Logs:**
+
 ```sh
 tail -100 /data/log/signalk-server/current | tai64nlocal
 ```
-
----
-
-## 12. Files produced in this session
-
-| File | Purpose |
-|---|---|
-| `zcf-circuit-parser.zip` | `lib/zcf-circuits.js`, `test/zcf-circuits.test.js`, `ZCF-CIRCUIT-TABLE.md` for the author |
-| `bench-status.log` | 65284 capture used to prove the load-mask mapping |
-| `czone-controller-id.patch` | **Superseded:** heartbeat approach, not needed |
-| This handover | Start point for the next session and for the fork's `docs/` |

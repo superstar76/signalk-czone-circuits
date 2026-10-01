@@ -4,7 +4,7 @@ const assert = require('assert')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { findStorageMount, createTrendStore, downsample, sanitizePath } = require('../lib/monitor/storage')
+const { findStorageMount, createTrendStore, bucketize, sanitizePath, HEARTBEAT_MS, BUCKET_MS } = require('../lib/monitor/storage')
 const { buildCatalog, resolveCatalog } = require('../lib/monitor/catalog')
 const { createMonitor } = require('../lib/monitor')
 
@@ -23,27 +23,108 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   assert.strictEqual(findStorageMount('/dev/mmcblk1p2 / ext4 rw 0 0\n/dev/mmcblk1p5 /data ext4 rw 0 0'), null)
 }
 
-// --- Store: batched write, read back, pending samples visible, retention.
+// --- Store: batched write, read back, pending samples visible.
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trend-'))
-  const store = createTrendStore({ directory: dir, retentionDays: 31 })
-  const now = Date.now()
-  store.record('electrical.batteries.2.voltage', 12.5, now - 120e3)
-  store.record('electrical.batteries.2.voltage', 12.6, now - 60e3)
-  store.record('electrical.batteries.2.voltage', 'n/a', now)
+  const store = createTrendStore({ directory: dir })
+  const now = Math.floor(Date.now() / 600e3) * 600e3 + 300e3 // mid-bucket, so the three samples share one
+  const series = 'electrical.batteries.2.voltage'
+  store.record(series, 12.5, now - 120e3)
+  store.record(series, 12.6, now - 60e3)
+  store.record(series, 'n/a', now)
   assert.strictEqual(store.flush().written, 2)
-  store.record('electrical.batteries.2.voltage', 12.7, now) // not flushed yet
-  const r = store.read('electrical.batteries.2.voltage', '1h', now)
+  store.record(series, 12.7, now) // not flushed yet
+  const r = store.read(series, '1h', now)
+  assert.strictEqual(r.tier, 'raw')
   assert.deepStrictEqual(r.data.map(d => d[1]), [12.5, 12.6, 12.7])
-  // File layout unchanged from the February plugin.
-  const file = path.join(dir, sanitizePath('electrical.batteries.2.voltage'), `${new Date(now - 60e3).toISOString().slice(0, 10)}.csv`)
+  // Full-detail file layout unchanged from the February plugin.
+  const file = path.join(dir, sanitizePath(series), `${new Date(now - 60e3).toISOString().slice(0, 10)}.csv`)
   assert(fs.readFileSync(file, 'utf8').startsWith(`${now - 120e3},12.5\n`))
-  // Retention removes old day files.
+  // Nothing is deleted by age unless asked for.
   const oldDir = path.join(dir, 'tanks.fuel.0.currentLevel')
-  fs.mkdirSync(oldDir, { recursive: true })
+  fs.mkdirSync(path.join(oldDir, 'summary'), { recursive: true })
   fs.writeFileSync(path.join(oldDir, '2020-01-01.csv'), '1,0.5\n')
-  assert.strictEqual(store.purge(now), 1)
-  assert(!fs.existsSync(oldDir))
+  fs.writeFileSync(path.join(oldDir, 'summary', '2020-01.csv'), '0,0.5,0.5,0.5\n')
+  assert.strictEqual(store.purge(now), 0)
+  assert(fs.existsSync(path.join(oldDir, '2020-01-01.csv')))
+  // With a limit: old full detail goes, the summary stays.
+  const limited = createTrendStore({ directory: dir, retentionDays: 31 })
+  assert.strictEqual(limited.purge(now), 1)
+  assert(!fs.existsSync(path.join(oldDir, '2020-01-01.csv')))
+  assert(fs.existsSync(path.join(oldDir, 'summary', '2020-01.csv')))
+}
+
+// --- Write on change: an unchanged value is stored at the start, just before
+//     a change, and every 10 minutes; every sample still feeds the summary.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trend-'))
+  const store = createTrendStore({ directory: dir })
+  const t0 = Date.UTC(2026, 8, 1, 12, 0, 0)
+  // One hour at 10 s: constant 12.5, except one sample of 14 at 30 minutes.
+  for (let i = 0; i < 360; i++) store.record('v', i === 180 ? 14 : 12.5, t0 + i * 10e3)
+  store.close()
+  const raw = fs.readFileSync(path.join(dir, 'v', '2026-09-01.csv'), 'utf8').trim().split('\n').map(l => l.split(',').map(Number))
+  assert(raw.length <= 12, `write-on-change stored ${raw.length} rows for 360 samples`)
+  assert.deepStrictEqual(raw[0], [t0, 12.5])
+  // The step keeps its shape: last 12.5 before, the 14, the 12.5 after.
+  const at = raw.findIndex(r => r[1] === 14)
+  assert.deepStrictEqual([raw[at - 1], raw[at], raw[at + 1]], [[t0 + 179 * 10e3, 12.5], [t0 + 180 * 10e3, 14], [t0 + 181 * 10e3, 12.5]])
+  // Unchanged stretches are never more than the heartbeat apart.
+  for (let i = 1; i < raw.length; i++) assert(raw[i][0] - raw[i - 1][0] <= HEARTBEAT_MS)
+  // Last sample is stored on close.
+  assert.deepStrictEqual(raw[raw.length - 1], [t0 + 359 * 10e3, 12.5])
+  // Summary: six 10-minute buckets, min/avg/max from all 60 samples each.
+  const sum = fs.readFileSync(path.join(dir, 'v', 'summary', '2026-09.csv'), 'utf8').trim().split('\n').map(l => l.split(',').map(Number))
+  assert.strictEqual(sum.length, 6)
+  assert.deepStrictEqual(sum[0], [t0, 12.5, 12.5, 12.5])
+  assert.deepStrictEqual(sum[3], [t0 + 3 * BUCKET_MS, 12.5, 12.525, 14])
+  // Long ranges read the summary tier as [t, avg, min, max]; short ranges full detail.
+  const now = t0 + 3600e3
+  const week = store.read('v', '7d', now)
+  assert.strictEqual(week.tier, 'summary')
+  assert.deepStrictEqual(week.data[3], [t0 + 3 * BUCKET_MS, 12.525, 12.5, 14])
+  assert.strictEqual(store.read('v', '24h', now).tier, 'raw')
+  assert(week.gapMs >= BUCKET_MS)
+}
+
+// --- A year of summaries comes back as a few hundred points with the extremes kept.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trend-'))
+  const store = createTrendStore({ directory: dir })
+  const now = Date.UTC(2026, 8, 1)
+  for (let t = now - 60 * 86400e3; t < now; t += 600e3) store.record('v', t === now - 30 * 86400e3 ? 99 : 12, t)
+  store.close()
+  const r = store.read('v', '1y', now)
+  assert.strictEqual(r.tier, 'summary')
+  assert(r.points <= 400 && r.points > 20)
+  assert.strictEqual(Math.max(...r.data.map(d => d[3])), 99)
+}
+
+// --- Space guard: when the volume is low, oldest full-detail days go first,
+//     summaries only when no old full detail is left; today's data is kept.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trend-'))
+  const now = Date.UTC(2026, 8, 10, 12)
+  const s = path.join(dir, 'v')
+  fs.mkdirSync(path.join(s, 'summary'), { recursive: true })
+  for (const day of ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10']) fs.writeFileSync(path.join(s, `${day}.csv`), '1,1\n')
+  for (const month of ['2026-07', '2026-08', '2026-09']) fs.writeFileSync(path.join(s, 'summary', `${month}.csv`), '1,1,1,1\n')
+  const total = 16e9
+  let free = 0
+  const files = () => fs.readdirSync(s).filter(f => f.endsWith('.csv')).concat(fs.readdirSync(path.join(s, 'summary')).map(f => `summary/${f}`)).sort()
+  // Each deleted file "frees" 100 MB; the shared-disk reserve is 10% = 1.6 GB.
+  const store = createTrendStore({ directory: dir, spaceProvider: () => ({ free: free + (7 - files().length) * 100e6, total }) })
+  free = 1.7e9
+  assert.strictEqual(store.purge(now), 0) // enough room: nothing touched
+  free = 1.45e9 // 150 MB short: two oldest days
+  assert.strictEqual(store.purge(now), 2)
+  assert.deepStrictEqual(files(), ['2026-09-09.csv', '2026-09-10.csv', 'summary/2026-07.csv', 'summary/2026-08.csv', 'summary/2026-09.csv'])
+  free = 1.2e9 // still short after all old full detail: one summary month too
+  store.purge(now)
+  assert.deepStrictEqual(files(), ['2026-09-10.csv', 'summary/2026-08.csv', 'summary/2026-09.csv'])
+  free = 0 // hopeless: current day and month still survive
+  store.purge(now)
+  assert.deepStrictEqual(files(), ['2026-09-10.csv', 'summary/2026-09.csv'])
 }
 
 // --- Storage by platform: off a GX, trends default to Signal K's data folder;
@@ -60,20 +141,23 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   assert.strictEqual(gx.status().reason, 'no_sd_card')
 }
 
-// --- Downsampling keeps long ranges to a few hundred points.
+// --- Bucketing keeps long ranges to a few hundred points.
 {
   const data = Array.from({ length: 2880 }, (_, i) => [i * 30e3, i])
-  assert(downsample(data, '24h').length <= 300)
-  assert.strictEqual(downsample(data, '1h').length, 2880)
+  const b = bucketize(data, 0, 2880 * 30e3)
+  assert(b.data.length <= 400)
+  assert.deepStrictEqual(b.data[0].slice(1), [3.5, 0, 7]) // avg, min, max of the first 8 samples
 }
 
-// --- No SD card: trending reported unavailable, nothing written anywhere.
+// --- No SD card: trending reported unavailable, nothing written or kept.
 {
-  const store = createTrendStore({ mountsProvider: () => '/dev/mmcblk1p2 / ext4 rw 0 0' })
-  store.record('x', 1)
+  const store = createTrendStore({ isVenus: true, fallbackDir: os.tmpdir(), mountsProvider: () => '/dev/mmcblk1p2 / ext4 rw 0 0' })
+  for (let i = 0; i < 100; i++) store.record('x', i, 1e12 + i * 10e3)
+  assert.strictEqual(store.status().pendingPaths, 1)
   const f = store.flush()
   assert.strictEqual(f.available, false)
   assert.strictEqual(f.reason, 'no_sd_card')
+  assert.strictEqual(store.status().pendingPaths, 0)
   assert.strictEqual(store.read('x').available, false)
 }
 
@@ -127,6 +211,12 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   const trend = call('/trend', { path: 'tanks.fuel.0.currentLevel', range: '1h' })
   assert.deepStrictEqual(trend.data.map(d => d[1]), [0.42])
   assert.strictEqual(call('/trend/status').available, true)
+  assert.strictEqual(call('/trend/status').sampleSeconds, 10) // default
+  monitor.stop()
+  monitor.start({ trendDirectory: path.join(dir, 'trends'), trendSampleSeconds: 30 }, zcfFile)
+  assert.strictEqual(call('/trend/status').sampleSeconds, 30)
+  monitor.start({ trendDirectory: path.join(dir, 'trends'), trendSampleSeconds: 7 }, zcfFile) // not offered: default
+  assert.strictEqual(call('/trend/status').sampleSeconds, 10)
   monitor.stop()
   assert(fs.readdirSync(path.join(dir, 'trends')).includes('tanks.fuel.0.currentLevel'))
 }

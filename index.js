@@ -948,6 +948,22 @@ module.exports = function (app) {
           default: '',
           description: 'Leave blank for automatic: on a Victron GX, trends go to an SD card or USB stick (never internal flash); on other systems, to the Signal K data folder.'
         },
+        trendSampleSeconds: {
+          type: 'number',
+          title: 'Trend sample rate',
+          enum: [5, 10, 15, 30, 60],
+          enumNames: ['5 seconds', '10 seconds', '15 seconds', '30 seconds', '1 minute'],
+          default: 10,
+          description: 'How often monitored values are sampled for trends. A value is only written when it changes (and at least every 10 minutes). Minimum 16 GB SD card or USB stick recommended.'
+        },
+        trendRetentionDays: {
+          type: 'number',
+          title: 'Keep full-detail trend data for',
+          enum: [0, 31, 90, 365],
+          enumNames: ['As long as there is space', '31 days', '90 days', '1 year'],
+          default: 0,
+          description: 'Ten-minute summaries are always kept. When storage runs low, the oldest full-detail days are removed first, then the oldest summaries.'
+        },
         victronSwitches: {
           type: 'boolean',
           title: 'Show CZone circuits in the Victron switch pane',

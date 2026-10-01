@@ -16,7 +16,8 @@
   const groupOf = item => GROUPS.includes(item.group) ? item.group : 'Other'
   const groupVar = g => `var(--mon-${(GROUP_STYLE[g] || GROUP_STYLE.Other)[1]})`
   const groupIcon = g => (GROUP_STYLE[g] || GROUP_STYLE.Other)[0]
-  const RANGES = [['1h', '1 h'], ['24h', '24 h'], ['7d', '7 days'], ['31d', '31 days']];
+  const RANGES = [['1h', '1 h'], ['24h', '24 h'], ['7d', '7 days'], ['31d', '31 days'], ['90d', '90 days'], ['1y', '1 year']];
+  const RANGE_MS = { '1h': 3600e3, '24h': 86400e3, '7d': 7 * 86400e3, '31d': 31 * 86400e3, '90d': 90 * 86400e3, '1y': 365 * 86400e3 };
   const PREF_KEY = 'signalk-czone-circuits:monitor';
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -107,7 +108,7 @@
     pill.classList.toggle('ok', !!trend.available)
     pill.title = trend.detail || trend.dir || ''
     pill.querySelector('span').textContent = trend.available
-      ? `Trending ${trend.trending || 0} values · ${trend.retentionDays || 31} days ${trend.location === 'data_dir' ? 'on disk' : trend.mount && /\/(sd|usb)/.test(trend.mount) ? 'on USB' : 'on SD card'}`
+      ? `Trending ${trend.trending || 0} values · every ${trend.sampleSeconds || 10} s · ${trend.location !== 'removable' ? 'on disk' : trend.mount && /\/(sd|usb)/.test(trend.mount) ? 'on USB' : 'on SD card'}${typeof trend.freeBytes === 'number' ? ` · ${(trend.freeBytes / 1073741824).toFixed(1)} GB free` : ''}`
       : trend.reason === 'no_sd_card' ? 'No SD card or USB stick: trends off' : trend.reason === 'write_failed' ? 'SD card read-only: trends off' : 'Trends unavailable'
   }
   function schedule () {
@@ -184,7 +185,7 @@
   }
 
   // ---- Trend chart
-  const chart = { open: false, item: null, key: null, range: '24h', data: [], unit: '', hoverIdx: null, timer: null, seq: 0 }
+  const chart = { open: false, item: null, key: null, range: '24h', data: [], unit: '', gapMs: 0, hoverIdx: null, timer: null, seq: 0 }
 
   function openTrend (item, key) {
     chart.open = true
@@ -228,10 +229,19 @@
     if (seq !== chart.seq || !chart.open) return
     const probe = convert(r.unit, 0, r.path)
     chart.unit = probe ? probe.u : ''
-    chart.data = (res.data || []).map(([t, v]) => { const c = convert(r.unit, v, r.path); return c ? [t, c.v, c.d] : null }).filter(Boolean)
+    // Rows are [t, value] (full detail) or [t, avg, min, max] (summarised).
+    // Kept as [t, value, decimals, min, max]; min/max are null for full detail.
+    chart.data = (res.data || []).map(([t, v, lo, hi]) => {
+      const c = convert(r.unit, v, r.path)
+      if (!c) return null
+      const cl = lo === undefined ? null : convert(r.unit, lo, r.path)
+      const ch = hi === undefined ? null : convert(r.unit, hi, r.path)
+      return [t, c.v, c.d, cl ? Math.min(cl.v, ch.v) : null, ch ? Math.max(cl.v, ch.v) : null]
+    }).filter(Boolean)
+    chart.gapMs = Number(res.gapMs) || 0
     chart.hoverIdx = null
     if (!res.available) setMsg(res.detail || 'Trends are not available. Insert an SD card in the GX.')
-    else if (!chart.data.length) setMsg('No samples in this range yet. Values are sampled every 30 seconds.')
+    else if (!chart.data.length) setMsg('No samples in this range yet.')
     else setMsg('')
     stats()
     draw()
@@ -254,7 +264,9 @@
     const f = v => v.toFixed(dp)
     const u = esc(chart.unit)
     const tile = (icon, label, v) => `<div class="stat"><div class="stat-icon">${icon}</div><div><strong>${f(v)} <small>${u}</small></strong><span>${label}</span></div></div>`
-    el.innerHTML = tile('●', 'Now', vals[vals.length - 1]) + tile('↓', 'Minimum', Math.min(...vals)) + tile('≈', 'Average', vals.reduce((a, b) => a + b, 0) / vals.length) + tile('↑', 'Maximum', Math.max(...vals))
+    const lows = d.map(p => p[3] === null ? p[1] : p[3])
+    const highs = d.map(p => p[4] === null ? p[1] : p[4])
+    el.innerHTML = tile('●', 'Now', vals[vals.length - 1]) + tile('↓', 'Minimum', Math.min(...lows)) + tile('≈', 'Average', vals.reduce((a, b) => a + b, 0) / vals.length) + tile('↑', 'Maximum', Math.max(...highs))
   }
 
   function niceTicks (min, max, count = 5) {
@@ -274,6 +286,7 @@
     const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     if (range === '1h' || range === '24h') return hm
     if (range === '7d') return d.toLocaleDateString([], { weekday: 'short' }) + ' ' + hm
+    if (range === '1y') return d.toLocaleDateString([], { month: 'short', year: '2-digit' })
     return d.toLocaleDateString([], { day: 'numeric', month: 'short' })
   }
 
@@ -307,8 +320,7 @@
     const ink = css.getPropertyValue('--muted').trim() || '#8fa7be'
     const panelCss = getComputedStyle(document.querySelector('#monPanel'))
     const lineColor = panelCss.getPropertyValue('--mon-line').trim() || css.getPropertyValue('--cyan').trim() || '#18d5e8'
-    const vals = d.map(p => p[1])
-    const y = niceTicks(Math.min(...vals), Math.max(...vals))
+    const y = niceTicks(Math.min(...d.map(p => p[3] === null ? p[1] : p[3])), Math.max(...d.map(p => p[4] === null ? p[1] : p[4])))
     const dp = Math.max(0, -Math.floor(Math.log10(y.step)))
     ctx.font = '11px Inter, system-ui, sans-serif'
     const labelW = Math.max(...y.ticks.map(t => ctx.measureText(t.toFixed(dp)).width)) + 12
@@ -316,7 +328,7 @@
     const pw = W - pad.l - pad.r
     const ph = H - pad.t - pad.b
     const now = Date.now()
-    const span = { '1h': 3600e3, '24h': 86400e3, '7d': 7 * 86400e3, '31d': 31 * 86400e3 }[chart.range]
+    const span = RANGE_MS[chart.range] || RANGE_MS['24h']
     const t0 = Math.min(d[0][0], now - span)
     const t1 = now
     const X = t => pad.l + ((t - t0) / (t1 - t0)) * pw
@@ -345,10 +357,9 @@
     }
 
     // Break the line where samples are missing (plugin stopped, card out).
-    const gaps = []
-    for (let i = 1; i < d.length; i++) gaps.push(d[i][0] - d[i - 1][0])
-    const median = gaps.length ? gaps.slice().sort((a, b) => a - b)[Math.floor(gaps.length / 2)] : 0
-    const breakAt = Math.max(median * 5, 5 * 60e3)
+    // The server says how far apart rows can be before data is missing
+    // (unchanged values are only stored every 10 minutes).
+    const breakAt = chart.gapMs || 16 * 60e3
     const segments = []
     let seg = [d[0]]
     for (let i = 1; i < d.length; i++) {
@@ -360,15 +371,28 @@
     const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ph)
     grad.addColorStop(0, withAlpha(lineColor, 0.22))
     grad.addColorStop(1, withAlpha(lineColor, 0))
+    const band = withAlpha(lineColor, 0.20)
     for (const s of segments) {
+      // Min-max band behind the average line (summarised data only).
+      const banded = s.length > 1 && s.some(p => p[3] !== null && p[4] !== p[3])
+      if (banded) {
+        ctx.beginPath()
+        s.forEach((p, i) => { const v = p[4] === null ? p[1] : p[4]; i ? ctx.lineTo(X(p[0]), Y(v)) : ctx.moveTo(X(p[0]), Y(v)) })
+        for (let i = s.length - 1; i >= 0; i--) ctx.lineTo(X(s[i][0]), Y(s[i][3] === null ? s[i][1] : s[i][3]))
+        ctx.closePath()
+        ctx.fillStyle = band
+        ctx.fill()
+      }
       if (s.length === 1) { ctx.fillStyle = lineColor; ctx.beginPath(); ctx.arc(X(s[0][0]), Y(s[0][1]), 2.5, 0, Math.PI * 2); ctx.fill(); continue }
-      ctx.beginPath()
-      s.forEach((p, i) => i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))
-      ctx.lineTo(X(s[s.length - 1][0]), pad.t + ph)
-      ctx.lineTo(X(s[0][0]), pad.t + ph)
-      ctx.closePath()
-      ctx.fillStyle = grad
-      ctx.fill()
+      if (!banded) {
+        ctx.beginPath()
+        s.forEach((p, i) => i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))
+        ctx.lineTo(X(s[s.length - 1][0]), pad.t + ph)
+        ctx.lineTo(X(s[0][0]), pad.t + ph)
+        ctx.closePath()
+        ctx.fillStyle = grad
+        ctx.fill()
+      }
       ctx.beginPath()
       s.forEach((p, i) => i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))
       ctx.strokeStyle = lineColor
@@ -402,7 +426,8 @@
     const p = chart.data[best]
     const x = geom.X(p[0])
     const when = new Date(p[0]).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-    tip.innerHTML = `<b>${p[1].toFixed(p[2])} ${esc(chart.unit)}</b><small>${esc(when)}</small>`
+    const spread = p[3] !== null && p[4] !== p[3] ? `<small>min ${p[3].toFixed(p[2])} · max ${p[4].toFixed(p[2])}</small>` : ''
+    tip.innerHTML = `<b>${p[1].toFixed(p[2])} ${esc(chart.unit)}</b>${spread}<small>${esc(when)}</small>`
     tip.style.display = 'block'
     const tw = tip.offsetWidth
     const left = x + 14 + tw > geom.W - 8 ? x - 14 - tw : x + 14

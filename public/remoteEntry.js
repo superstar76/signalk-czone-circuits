@@ -84,6 +84,12 @@ var signalk_czone_circuits = (function () {
       persist({ trendDirectory: String(value || '').trim() })
     }
 
+    function setTrendNumber (key, value) {
+      var next = {}
+      next[key] = Number(value)
+      persist(next)
+    }
+
     function chooseSource (value) {
       setLocalSource(value)
       if (value === 'installedZcf') {
@@ -250,6 +256,24 @@ var signalk_czone_circuits = (function () {
           React.createElement('input', { type: 'text', style: { width: '60%' }, placeholder: 'Automatic', defaultValue: configuration.trendDirectory || '', disabled: busy, onBlur: function (e) { if ((e.target.value || '').trim() !== (configuration.trendDirectory || '')) setTrendDirectory(e.target.value) } })
         ),
         React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Blank = automatic. On a Victron GX trends go to an SD card or USB stick, never internal flash. On a Pi or PC they go to the Signal K data folder.')
+      ),
+
+      React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
+        React.createElement('label', { style: { display: 'block' } }, 'Trend sample rate ',
+          React.createElement('select', { value: String(configuration.trendSampleSeconds || 10), disabled: busy, onChange: function (e) { setTrendNumber('trendSampleSeconds', e.target.value) } },
+            [[5, '5 seconds'], [10, '10 seconds'], [15, '15 seconds'], [30, '30 seconds'], [60, '1 minute']].map(function (o) {
+              return React.createElement('option', { key: o[0], value: String(o[0]) }, o[1])
+            })
+          )
+        ),
+        React.createElement('label', { style: { display: 'block', marginTop: 8 } }, 'Keep full-detail trend data for ',
+          React.createElement('select', { value: String(configuration.trendRetentionDays || 0), disabled: busy, onChange: function (e) { setTrendNumber('trendRetentionDays', e.target.value) } },
+            [[0, 'As long as there is space'], [31, '31 days'], [90, '90 days'], [365, '1 year']].map(function (o) {
+              return React.createElement('option', { key: o[0], value: String(o[0]) }, o[1])
+            })
+          )
+        ),
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Minimum 16 GB SD card or USB stick recommended. Values are written when they change, and ten-minute summaries are always kept. When storage runs low the oldest full-detail days are removed first, then the oldest summaries, so recording never stops.')
       ),
 
       current ? React.createElement('div', { style: { fontSize: 12 } }, 'Currently loaded: ' + (current.vesselName || current.fileName) + ' · ' + current.circuits + ' circuits · ' + current.modes + ' modes') : null,
