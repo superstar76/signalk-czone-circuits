@@ -59,6 +59,13 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(status => {
   // Invalid type for a non-dimmer is refused; momentary is allowed
   assert.strictEqual(objects['/SwitchableOutput/Light_3/Settings/Type'].SetValue([[{ type: 'i' }], [2]]), 1)
   assert.strictEqual(objects['/SwitchableOutput/Light_3/Settings/Type'].SetValue([[{ type: 'i' }], [0]]), 0)
+  // Current shown in the label while on (Light 2 is on at 1.5 A)
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Settings/CustomName'), ['s', 'Light 2 · 1.5 A'])
+  // A rename from the GUI keeps the name, not the amps
+  objects['/SwitchableOutput/Light_2/Settings/CustomName'].SetValue([[{ type: 's' }], ['Saloon · 1.5 A']])
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Settings/CustomName'), ['s', 'Saloon · 1.5 A'])
+  deltaListener({ path: 'electrical.czone.Light_2.switch.state', value: false })
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Settings/CustomName'), ['s', 'Saloon'])
   // CZone -> pane: a state delta updates State and Status and signals it
   deltaListener({ path: 'electrical.czone.Light_1.switch.state', value: true })
   assert.deepStrictEqual(get('/SwitchableOutput/Light_1/State'), ['i', 1])

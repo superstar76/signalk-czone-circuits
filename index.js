@@ -953,6 +953,12 @@ module.exports = function (app) {
           title: 'Show CZone circuits in the Victron switch pane',
           default: false,
           description: 'Venus OS 3.60+ only. Adds every circuit to the GX switch pane (and VRM), grouped by CZone category. Switching from the pane still needs NMEA 2000 sending enabled.'
+        },
+        victronSwitchCurrent: {
+          type: 'boolean',
+          title: 'Show circuit current in the switch label',
+          default: true,
+          description: 'While a circuit is on, its switch reads e.g. "Light 1 · 1.5 A". The Venus OS switch pane does not display current itself yet.'
         }
       }
     }),

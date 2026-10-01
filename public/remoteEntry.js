@@ -76,6 +76,10 @@ var signalk_czone_circuits = (function () {
       persist({ victronSwitches: value })
     }
 
+    function setVictronSwitchCurrent (value) {
+      persist({ victronSwitchCurrent: value })
+    }
+
     function setTrendDirectory (value) {
       persist({ trendDirectory: String(value || '').trim() })
     }
@@ -234,7 +238,11 @@ var signalk_czone_circuits = (function () {
           React.createElement('input', { type: 'checkbox', checked: configuration.victronSwitches === true, disabled: busy, onChange: function (e) { setVictronSwitches(e.target.checked) } }),
           ' Show CZone circuits in the Victron switch pane'
         ),
-        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Venus OS 3.60 or newer. Adds every circuit to the GX switch pane and VRM, one card per CZone category. Switching from the pane also needs NMEA 2000 sending allowed above.')
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Venus OS 3.60 or newer. Adds every circuit to the GX switch pane and VRM, one card per CZone category. Switching from the pane also needs NMEA 2000 sending allowed above.'),
+        React.createElement('label', { style: { display: 'block', marginTop: 8 } },
+          React.createElement('input', { type: 'checkbox', checked: configuration.victronSwitchCurrent !== false, disabled: busy || configuration.victronSwitches !== true, onChange: function (e) { setVictronSwitchCurrent(e.target.checked) } }),
+          ' Show circuit current in the switch label (e.g. "Light 1 · 1.5 A")'
+        )
       ),
 
       React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
