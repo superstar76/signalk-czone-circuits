@@ -82,3 +82,7 @@
   .mon-row .arrow { display:none; }
   .mon-row .mon-icon { width:26px; height:26px; font-size:13px; }
 }
+
+/* Circuit list: the arrow beside ON/OFF opens that circuit's current trend */
+.trend-arrow { border:0; background:transparent; cursor:pointer; padding:6px 8px; border-radius:8px; font-size:19px; line-height:1; }
+.trend-arrow:hover { color:#cfe3f5; background:rgba(55,143,215,.14); }

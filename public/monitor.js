@@ -36,7 +36,7 @@
       case 'ratio': return { v: v * 100, u: '%', d: 0 }
       case 'Pa': return /outside\.pressure$/.test(path || '') || v > 50000 ? { v: v / 100, u: 'hPa', d: 0 } : { v: v / 1000, u: 'kPa', d: 0 }
       case 'm3': return { v: v * 1000, u: 'L', d: 0 }
-      case 'V': return { v, u: 'V', d: 2 }
+      case 'V': return { v, u: 'V', d: /^electrical\.ac\./.test(path || '') ? 1 : 2 }
       case 'A': return { v, u: 'A', d: 1 }
       case 'W': return { v, u: 'W', d: 0 }
       case 'Hz': return { v, u: 'Hz', d: 1 }
@@ -153,13 +153,18 @@
       <span class="arrow">${clickable ? '›' : ''}</span></div>`
   }
 
+  // Circuit current is trended from the circuit list (arrow beside ON/OFF),
+  // not listed again here.
+  const monitored = () => items.filter(i => i.group !== 'Circuit current')
+
   function render () {
     const body = document.querySelector('#monBody')
     if (!body) return
-    const mapped = items.filter(i => i.mapped).length
-    document.querySelector('#monCount').textContent = `${mapped} of ${items.length} items live`
-    const shown = items.filter(i => prefs.showUnmapped || i.mapped)
-    if (!items.length) { body.innerHTML = '<div class="empty">No meters, inputs or circuits found in the ZCF.</div>'; return }
+    const all = monitored()
+    const mapped = all.filter(i => i.mapped).length
+    document.querySelector('#monCount').textContent = `${mapped} of ${all.length} items live`
+    const shown = all.filter(i => prefs.showUnmapped || i.mapped)
+    if (!all.length) { body.innerHTML = '<div class="empty">No meters or inputs found in the ZCF.</div>'; return }
     if (!shown.length) { body.innerHTML = '<div class="empty">Nothing from the ZCF is on the bus yet. Tick “Show unmapped” to see what is expected.</div>'; return }
     body.innerHTML = GROUPS.map(g => {
       const list = shown.filter(i => groupOf(i) === g)
@@ -411,6 +416,7 @@
       mount()
       if (visible === !!on) return
       visible = !!on
+      if (chart.open) closeTrend() // a trend belongs to the view it was opened from
       document.querySelector('#monitorView').classList.toggle('show', visible)
       if (visible) {
         render(); refresh(); refreshTrendStatus()
@@ -418,7 +424,16 @@
       }
       schedule()
     },
-    count: () => items.filter(i => i.mapped).length
+    count: () => monitored().filter(i => i.mapped).length,
+    // Open the trend for a Signal K path (circuit list arrow).
+    trendPath (skPath) {
+      mount()
+      const item = items.find(i => i.readings.some(r => r.candidates[0] === skPath))
+      if (!item) return false
+      const r = item.readings.find(x => x.candidates[0] === skPath)
+      openTrend(item, r.key)
+      return true
+    }
   }
 
   mount()
