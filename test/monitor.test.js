@@ -248,4 +248,35 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   monitor.stop()
 }
 
+// --- Wire listener: candump output (format as on the bench) reaches the
+//     sensor decoder. A stand-in candump script replays two bench lines.
+{
+  const { parseCandumpLine } = require('../lib/monitor/wire')
+  assert.strictEqual(parseCandumpLine('  vecan0  09FD0C65   [8]  FF 66 02 C4 96 04 FF FF'), '0 R 09FD0C65 FF 66 02 C4 96 04 FF FF')
+  assert.strictEqual(parseCandumpLine('garbage'), null)
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wire-'))
+  const bin = path.join(dir, 'bin')
+  fs.mkdirSync(bin)
+  fs.writeFileSync(path.join(bin, 'candump'), '#!/bin/sh\necho "  vecan0  09FD0C65   [8]  FF 66 02 C4 96 04 FF FF"\necho "  vecan0  09FD0865   [8]  FF 65 01 AB 74 FF FF FF"\nexec sleep 2\n', { mode: 0o755 })
+  const zcfFile = path.join(dir, 'installation.zcf')
+  fs.copyFileSync(path.join(__dirname, 'fixtures', 'TestBench-2026-10-01.zcf'), zcfFile)
+  const oldPath = process.env.PATH
+  process.env.PATH = `${bin}:${oldPath}`
+  const monitor = createMonitor({ getSelfPath: () => undefined, debug: () => {} })
+  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  process.env.PATH = oldPath
+  const routes = {}
+  monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
+  setTimeout(() => {
+    let out
+    routes['/monitor/items']({ query: {} }, { json: v => { out = v } })
+    const by = Object.fromEntries(out.items.map(i => [i.name, i]))
+    assert.strictEqual(by['Ruuvi Tag'].readings[0].value, 300.74)
+    assert.strictEqual(by['Victron Temp Sensor'].readings[0].value, 298.67)
+    monitor.stop()
+    console.log('Monitor wire tests passed')
+  }, 500)
+}
+
 console.log('Monitor tests passed')
