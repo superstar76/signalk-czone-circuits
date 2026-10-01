@@ -68,18 +68,18 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   const { items, warnings } = buildCatalog(fixture('Compass-Rose-28.06.26.zcf'))
   assert.deepStrictEqual(warnings, [])
   const byName = Object.fromEntries(items.map(i => [i.name, i]))
-  assert.strictEqual(byName['House Battery'].readings[0].candidates[0], 'electrical.batteries.1.voltage')
+  assert.strictEqual(byName['House Battery'].readings[0].candidates[0], 'electrical.batteries.0.voltage')
   assert.strictEqual(byName['Fuel Level'].readings[0].candidates[0], 'tanks.fuel.0.currentLevel')
   assert.strictEqual(byName['Atmospheric Pressure'].readings[0].candidates[0], 'environment.outside.pressure')
   assert.strictEqual(byName['Fridge Temperature'].group, 'Temperatures')
   assert.strictEqual(byName['Anchor Up'].group, 'Inputs')
   assert.strictEqual(byName['Anchor Light'].readings[0].candidates[0], 'electrical.czone.Anchor_Light.current')
   // Resolution picks the first candidate that has a value.
-  const values = { 'electrical.batteries.1.voltage': 13.1, 'electrical.batteries.1.stateOfCharge': 0.8 }
+  const values = { 'electrical.batteries.0.voltage': 13.1, 'electrical.batteries.0.stateOfCharge': 0.8 }
   const resolved = resolveCatalog(items, p => values[p])
   const hb = resolved.find(i => i.name === 'House Battery')
   assert.strictEqual(hb.mapped, true)
-  assert.strictEqual(hb.readings.find(r => r.key === 'soc').path, 'electrical.batteries.1.stateOfCharge')
+  assert.strictEqual(hb.readings.find(r => r.key === 'soc').path, 'electrical.batteries.0.stateOfCharge')
 }
 
 // --- Catalogue: TestBench wired meter uses its ZCF instance, source-filtered
@@ -98,7 +98,7 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mon-'))
   const zcfFile = path.join(dir, 'installation.zcf')
   fs.copyFileSync(path.join(__dirname, 'fixtures', 'Compass-Rose-28.06.26.zcf'), zcfFile)
-  const sk = { 'electrical.batteries.1.voltage': { value: 13.2 }, 'tanks.fuel.0.currentLevel': { value: 0.42 } }
+  const sk = { 'electrical.batteries.0.voltage': { value: 13.2 }, 'tanks.fuel.0.currentLevel': { value: 0.42 } }
   const app = { getSelfPath: p => sk[p], debug: () => {} }
   const monitor = createMonitor(app)
   monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
@@ -109,7 +109,7 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   const items = call('/monitor/items')
   assert.strictEqual(items.total, 47)
   assert.strictEqual(items.mapped, 2)
-  assert.deepStrictEqual(call('/monitor/values').values, { 'electrical.batteries.1.voltage': 13.2, 'tanks.fuel.0.currentLevel': 0.42 })
+  assert.deepStrictEqual(call('/monitor/values').values, { 'electrical.batteries.0.voltage': 13.2, 'tanks.fuel.0.currentLevel': 0.42 })
   const trend = call('/trend', { path: 'tanks.fuel.0.currentLevel', range: '1h' })
   assert.deepStrictEqual(trend.data.map(d => d[1]), [0.42])
   assert.strictEqual(call('/trend/status').available, true)
@@ -217,17 +217,19 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
 
 // --- Sensors straight off the bus (bench ZCF 1 Oct 2026): Ruuvi Tag =
 //     temperature instance 102 source 2, Victron Temp Sensor = instance 101
-//     source 1. Virtual "Victron Shunt" (instance 1) must ignore the Meter
-//     Interface's "5V System - MI", which is also instance 1.
+//     source 1. A virtual meter must ignore values a CZone module publishes on
+//     the same Signal K path (here: Victron Shunt, instance 2, with a Meter
+//     Interface value on electrical.batteries.2).
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sens-'))
   const zcfFile = path.join(dir, 'installation.zcf')
   fs.copyFileSync(path.join(__dirname, 'fixtures', 'TestBench-2026-10-01.zcf'), zcfFile)
   const sk = {
-    'electrical.batteries.1.voltage': {
+    'electrical.batteries.2.voltage': {
       value: 5.02, $source: 'n2k-on-ve.can-socket.9',
       values: { 'n2k-on-ve.can-socket.9': { value: 5.02 }, 'n2k-on-ve.can-socket.224': { value: 13.31 } }
-    }
+    },
+    'electrical.batteries.1.voltage': { value: 5.02, $source: 'n2k-on-ve.can-socket.9' }
   }
   const monitor = createMonitor({ getSelfPath: p => sk[p], debug: () => {} })
   monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
@@ -258,7 +260,14 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wire-'))
   const bin = path.join(dir, 'bin')
   fs.mkdirSync(bin)
-  fs.writeFileSync(path.join(bin, 'candump'), '#!/bin/sh\necho "  vecan0  09FD0C65   [8]  FF 66 02 C4 96 04 FF FF"\necho "  vecan0  09FD0865   [8]  FF 65 01 AB 74 FF FF FF"\nexec sleep 2\n', { mode: 0o755 })
+  fs.writeFileSync(path.join(bin, 'candump'), [
+    '#!/bin/sh',
+    'echo "  vecan0  09FD0C65   [8]  FF 66 02 C4 96 04 FF FF"',
+    'echo "  vecan0  09FD0865   [8]  FF 65 01 AB 74 FF FF FF"',
+    // 127508 instance 2: 13.27 V, -2.5 A; 127506 first frame instance 2, SoC 87 %
+    'echo "  vecan0  0DF21465   [8]  02 2F 05 E7 FF FF FF 00"',
+    'echo "  vecan0  0DF21265   [8]  20 0B 00 02 00 57 64 FF"',
+    'exec sleep 2', ''].join('\n'), { mode: 0o755 })
   const zcfFile = path.join(dir, 'installation.zcf')
   fs.copyFileSync(path.join(__dirname, 'fixtures', 'TestBench-2026-10-01.zcf'), zcfFile)
   const oldPath = process.env.PATH
@@ -274,6 +283,8 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
     const by = Object.fromEntries(out.items.map(i => [i.name, i]))
     assert.strictEqual(by['Ruuvi Tag'].readings[0].value, 300.74)
     assert.strictEqual(by['Victron Temp Sensor'].readings[0].value, 298.67)
+    const shunt = Object.fromEntries(by['Victron Shunt'].readings.map(r => [r.key, r.value]))
+    assert.deepStrictEqual([shunt.voltage, shunt.current, shunt.soc], [13.27, -2.5, 0.87])
     monitor.stop()
     console.log('Monitor wire tests passed')
   }, 500)

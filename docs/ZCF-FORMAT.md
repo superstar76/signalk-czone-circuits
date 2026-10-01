@@ -102,13 +102,26 @@ table is only accepted when exactly `count` records end exactly at the declared 
 
 ## Meters
 
-`record: u8 ac (0 DC / 1 AC) | u8 instance | u8 module | u8 nameLength | name`
+`record: u8 ac (0 DC / 1 AC) | u8 meterId | u8 module | u8 nameLength | name`
 
-- `instance` = the meter's configured NMEA 2000 instance (SugarShack uses 16–31, so it is not an
-  input number). Bench: Meter Interface "House Battery" instance 0 publishes `electrical.batteries.0`.
+- `meterId` is **not** the NMEA 2000 instance. Virtual meters are numbered 1..n; a wired meter's id
+  is its input on the module (Meter Interface DC1 = 0; SugarShack's 16–31 are inputs on module 0x28).
 - `module 0` = virtual/third-party meter; `module ≠ 0` = meter wired to that module, which
-  broadcasts it. Another device may publish the same instance (the Cerbo re-broadcasts its
-  battery as instance 0 on the bench), so read wired meters from the module's own source address.
+  broadcasts it. Another device may publish the same instance, so read wired meters from the
+  module's own source address.
+
+### Meter settings (NMEA 2000 instance)
+
+Straight after the Meters table come two more tables, DC then AC, same header pattern
+(`u32 length | u16 count | u8 recordSize`; DC records 86 or 92 bytes, AC 65):
+
+`record: u8 nmeaInstance | u8 meterId | u8 module | …`
+
+`(meterId, module)` matches a meter in the list; `nmeaInstance` is what the Configuration Tool shows
+and what goes out in PGN 127508/127506. Confirmed on the bench (1 Oct 2026): Victron Shunt
+meterId 1 → instance 2, and the Cerbo sends PGN 127508 on instance 2; Meter Interface
+"5V System - MI" meterId 1 → instance 1, sent by the Meter Interface on instance 1. Every DC and AC
+meter in all eight fixture files resolves through these tables.
 
 ## Inputs (signal inputs + third-party senders)
 

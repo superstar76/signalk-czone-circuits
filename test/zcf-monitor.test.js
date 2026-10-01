@@ -17,10 +17,12 @@ const pick = (list, keys) => list.map(x => Object.fromEntries(keys.map(k => [k, 
 {
   const buf = load('TestBench.zcf')
   const m = parseMeters(buf)
-  // House Battery instance 0 confirmed live: Meter Interface (NMEA 2000
-  // source 9) publishes electrical.batteries.0.
+  // Instances come from the DC/AC meter settings tables, not the meter list.
+  // House Battery instance 0 confirmed live (Meter Interface, source 9);
+  // Victron Shunt instance 2 confirmed live (Cerbo sends PGN 127508 instance 2)
+  // and matches the Configuration Tool.
   assert.deepStrictEqual(pick(m.meters, ['name', 'type', 'module', 'instance']), [
-    { name: 'Victron Shunt', type: 'DC', module: 0, instance: 1 },
+    { name: 'Victron Shunt', type: 'DC', module: 0, instance: 2 },
     { name: 'House Battery', type: 'DC', module: 4, instance: 0 },
     { name: 'Power In', type: 'AC', module: 4, instance: 0 },
     { name: 'Power Out', type: 'AC', module: 4, instance: 1 }
@@ -38,10 +40,10 @@ const pick = (list, keys) => list.map(x => Object.fromEntries(keys.map(k => [k, 
   const buf = load('Compass-Rose-28.06.26.zcf')
   const m = parseMeters(buf)
   assert.deepStrictEqual(pick(m.meters, ['name', 'type', 'virtual', 'instance']), [
-    { name: 'House Battery', type: 'DC', virtual: true, instance: 1 },
-    { name: 'Solar', type: 'DC', virtual: true, instance: 2 },
-    { name: 'Inverter Output', type: 'AC', virtual: true, instance: 9 },
-    { name: 'AC Input', type: 'AC', virtual: true, instance: 10 }
+    { name: 'House Battery', type: 'DC', virtual: true, instance: 0 },
+    { name: 'Solar', type: 'DC', virtual: true, instance: 1 },
+    { name: 'Inverter Output', type: 'AC', virtual: true, instance: 0 },
+    { name: 'AC Input', type: 'AC', virtual: true, instance: 1 }
   ])
   const i = parseInputs(buf).inputs
   const senders = i.filter(x => x.thirdParty)
@@ -57,11 +59,18 @@ const pick = (list, keys) => list.map(x => Object.fromEntries(keys.map(k => [k, 
   ])
 }
 
-// --- SugarShack: instances well above any module's input count, so the field
-//     is the configured NMEA 2000 instance, not an input number.
+// --- Meter settings tables: every DC and AC meter gets its instance from
+//     them (bench 1 Oct 2026 ZCF: Victron Shunt 2, 5V System - Victron 3,
+//     House Battery 0, 5V System - MI 1).
 {
-  const m = parseMeters(load('SugarShack-20260927-01.zcf')).meters
-  assert(m.some(x => x.instance === 31 && x.module === 0x28))
+  const m = parseMeters(load('TestBench-2026-10-01.zcf')).meters
+  assert.deepStrictEqual(m.map(x => [x.name, x.meterId, x.instance]), [
+    ['Victron Shunt', 1, 2], ['5V System - Victron', 4, 3], ['House Battery', 0, 0],
+    ['5V System - MI', 1, 1], ['Power In', 0, 0], ['Power Out', 1, 1]
+  ])
+  for (const file of fs.readdirSync(fixtures).filter(f => f.endsWith('.zcf'))) {
+    for (const x of parseMeters(load(file)).meters) assert.strictEqual(x.instanceFrom, 'settings', `${file}: ${x.name}`)
+  }
 }
 
 // --- Every fixture: both tables must walk exactly.
