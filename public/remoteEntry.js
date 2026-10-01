@@ -76,6 +76,10 @@ var signalk_czone_circuits = (function () {
       persist({ victronSwitches: value })
     }
 
+    function setTrendDirectory (value) {
+      persist({ trendDirectory: String(value || '').trim() })
+    }
+
     function chooseSource (value) {
       setLocalSource(value)
       if (value === 'installedZcf') {
@@ -231,6 +235,13 @@ var signalk_czone_circuits = (function () {
           ' Show CZone circuits in the Victron switch pane'
         ),
         React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Venus OS 3.60 or newer. Adds every circuit to the GX switch pane and VRM, one card per CZone category. Switching from the pane also needs NMEA 2000 sending allowed above.')
+      ),
+
+      React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
+        React.createElement('label', null, 'Trend folder (optional) ',
+          React.createElement('input', { type: 'text', style: { width: '60%' }, placeholder: 'Automatic', defaultValue: configuration.trendDirectory || '', disabled: busy, onBlur: function (e) { if ((e.target.value || '').trim() !== (configuration.trendDirectory || '')) setTrendDirectory(e.target.value) } })
+        ),
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Blank = automatic. On a Victron GX trends go to an SD card or USB stick, never internal flash. On a Pi or PC they go to the Signal K data folder.')
       ),
 
       current ? React.createElement('div', { style: { fontSize: 12 } }, 'Currently loaded: ' + (current.vesselName || current.fileName) + ' · ' + current.circuits + ' circuits · ' + current.modes + ' modes') : null,

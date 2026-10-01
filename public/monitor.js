@@ -107,8 +107,8 @@
     pill.classList.toggle('ok', !!trend.available)
     pill.title = trend.detail || trend.dir || ''
     pill.querySelector('span').textContent = trend.available
-      ? `Trending ${trend.trending || 0} values · ${trend.retentionDays || 31} days on SD card`
-      : trend.reason === 'no_sd_card' ? 'No SD card: trends off' : trend.reason === 'write_failed' ? 'SD card read-only: trends off' : 'Trends unavailable'
+      ? `Trending ${trend.trending || 0} values · ${trend.retentionDays || 31} days ${trend.location === 'data_dir' ? 'on disk' : trend.mount && /\/(sd|usb)/.test(trend.mount) ? 'on USB' : 'on SD card'}`
+      : trend.reason === 'no_sd_card' ? 'No SD card or USB stick: trends off' : trend.reason === 'write_failed' ? 'SD card read-only: trends off' : 'Trends unavailable'
   }
   function schedule () {
     clearTimeout(pollTimer)

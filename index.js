@@ -942,6 +942,12 @@ module.exports = function (app) {
           default: '',
           description: 'Used when Configuration source is set to Saved network configuration. Use the CZone Circuits configuration panel to read a new configuration from the network.'
         },
+        trendDirectory: {
+          type: 'string',
+          title: 'Trend folder (optional)',
+          default: '',
+          description: 'Leave blank for automatic: on a Victron GX, trends go to an SD card or USB stick (never internal flash); on other systems, to the Signal K data folder.'
+        },
         victronSwitches: {
           type: 'boolean',
           title: 'Show CZone circuits in the Victron switch pane',
@@ -956,6 +962,10 @@ module.exports = function (app) {
       restartPlugin = restart
       fs.mkdirSync(configDir, { recursive: true })
       loadConfiguredZcf()
+      monitor.setControls({
+        state: (slug, on) => sendCircuitState(circuitByName(slug), on),
+        brightness: (slug, level) => sendCircuitBrightness(circuitByName(slug), level)
+      })
       monitor.start(settings, zcfPath())
       registerCircuitPutHandlers()
       registerModePutHandlers()

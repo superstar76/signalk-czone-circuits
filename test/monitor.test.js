@@ -46,6 +46,20 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   assert(!fs.existsSync(oldDir))
 }
 
+// --- Storage by platform: off a GX, trends default to Signal K's data folder;
+//     on a GX the data folder (internal flash) is never used.
+{
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'skdata-'))
+  const noCard = () => '/dev/mmcblk1p2 / ext4 rw 0 0'
+  const pi = createTrendStore({ fallbackDir: data, isVenus: false, mountsProvider: noCard })
+  pi.record('x', 1)
+  assert.strictEqual(pi.flush().written, 1)
+  assert.strictEqual(pi.status().location, 'data_dir')
+  assert(fs.existsSync(path.join(data, 'trends', 'x')))
+  const gx = createTrendStore({ fallbackDir: data, isVenus: true, mountsProvider: noCard })
+  assert.strictEqual(gx.status().reason, 'no_sd_card')
+}
+
 // --- Downsampling keeps long ranges to a few hundred points.
 {
   const data = Array.from({ length: 2880 }, (_, i) => [i * 30e3, i])

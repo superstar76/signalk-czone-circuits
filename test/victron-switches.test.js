@@ -24,7 +24,9 @@ const app = {
   streambundle: { getSelfBus: () => ({ onValue: fn => { deltaListener = fn; return () => {} } }) }
 }
 const zcf = path.join(__dirname, 'fixtures', 'TestBench-2026-10-01.zcf')
-const sw = createVictronSwitches(app, { getCurrent: p => (p === 'electrical.czone.Light_2.current' ? 1.5 : null), version: 'test' })
+let hostControls = null
+const calls = []
+const sw = createVictronSwitches(app, { controls: () => hostControls, getCurrent: p => (p === 'electrical.czone.Light_2.current' ? 1.5 : null), version: 'test' })
 
 sw.start({ victronSwitches: true }, zcf, { bus }).then(status => {
   assert.strictEqual(status.running, true)
@@ -35,6 +37,7 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(status => {
   assert.deepStrictEqual(get('/DeviceInstance'), ['i', 100])
   // One channel per circuit, grouped by CZone category
   assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Name'), ['s', 'Light 1'])
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Settings/CustomName'), ['s', 'Light 1'])
   assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Settings/Group'), ['s', 'Lighting'])
   assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Settings/Type'), ['i', 1])
   assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Settings/ValidTypes'), ['i', 0b011])
@@ -43,9 +46,16 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(status => {
   assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Status'), ['i', 0x09])
   assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Current'), ['d', 1.5])
   assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Current'), ['ai', []])
-  // Pane -> CZone: SetValue on State becomes a Signal K PUT on the plugin's own path
+  // Pane -> CZone without host controls: Signal K PUT on the plugin's own path
   assert.strictEqual(objects['/SwitchableOutput/Light_3/State'].SetValue([[{ type: 'i' }], [1]]), 0)
   assert.deepStrictEqual(puts, [['electrical.czone.Light_3.switch.state', true]])
+  // With host controls (as index.js provides): called directly; a refusal
+  // (e.g. sending disabled) is returned to the pane as an error.
+  hostControls = { state: (slug, on) => { calls.push([slug, on]); if (slug === 'Light_4') throw new Error('NMEA 2000 sending is disabled') } }
+  assert.strictEqual(objects['/SwitchableOutput/Light_1/State'].SetValue([[{ type: 'i' }], [1]]), 0)
+  assert.deepStrictEqual(calls, [['Light_1', true]])
+  assert.strictEqual(objects['/SwitchableOutput/Light_4/State'].SetValue([[{ type: 'i' }], [1]]), 1)
+  assert.match(sw.status().recent[0].result, /sending is disabled/)
   // Invalid type for a non-dimmer is refused; momentary is allowed
   assert.strictEqual(objects['/SwitchableOutput/Light_3/Settings/Type'].SetValue([[{ type: 'i' }], [2]]), 1)
   assert.strictEqual(objects['/SwitchableOutput/Light_3/Settings/Type'].SetValue([[{ type: 'i' }], [0]]), 0)
