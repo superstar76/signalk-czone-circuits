@@ -7,6 +7,7 @@ const czone = require('./lib/czone')
 const nmea = require('./lib/nmea2000')
 const signalk = require('./lib/signalk')
 const { createMonitor } = require('./lib/monitor')
+const { applyStatusFallback } = require('./lib/status-fallback')
 
 const MAX_UPLOAD_BYTES = 1024 * 1024
 const CZONE_CONFIG_BLOCK_HEADER = 23
@@ -160,6 +161,11 @@ module.exports = function (app) {
       return null
     }
     mapping = zcf.load(zcfPath())
+    // [fork, interim] ZCF without a status table: state bit = output channel.
+    {
+      const inferred = applyStatusFallback(mapping)
+      if (inferred) log(`No status table in the ZCF: circuit state inferred from module/channel for ${inferred} circuits`)
+    }
     mapping.commandDeviceId = selectCommandDeviceId(mapping)
     publishedCircuitValues.clear()
     runtimeState = new Map(mapping.circuits.map(c => [c.name, {
