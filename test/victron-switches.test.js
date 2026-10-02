@@ -116,7 +116,57 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(async status => {
   assert.strictEqual(sent['/SwitchableOutput/Light_5/State'], 1)
   assert.strictEqual(sent['/SwitchableOutput/Light_4/State'], 0)
   assert('/SwitchableOutput/Light_1/Settings/CustomName' in sent)
+  // /victron/status: which circuits the pane has as on, and any that differ
+  // from Signal K (none here), plus whether the resync is running.
+  const rep = sw.status()
+  assert(rep.on.includes('Light_5') && !rep.on.includes('Light_4'))
+  assert(rep.diag.seedRuns > 0 && rep.diag.seedErrors === 0 && rep.diag.liveChannels === 6)
+  sk['electrical.czone.Light_4.switch.state'] = { value: true } // Signal K on, pane not yet told
+  assert.deepStrictEqual(sw.status().mismatch, [{ circuit: 'Light_4', plugin: null, signalk: 1, pane: 0 }])
+  sw._resync()
+  assert.deepStrictEqual(sw.status().mismatch, [])
+  // One circuit's value blowing up must not stop the others being updated.
+  const realGet = app.getSelfPath
+  sk['electrical.czone.Light_4.switch.state'] = { value: false }
+  app.getSelfPath = p => { if (p.includes('Buzzer.')) throw new Error('boom'); return realGet(p) }
+  sw._resync()
+  app.getSelfPath = realGet
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_4/State'), ['i', 0])
+  assert(sw.status().diag.seedErrors > 0 && /Buzzer: boom/.test(sw.status().diag.lastError))
   sw.stop()
+
+  // The pane takes circuit state from the host plugin's own decoded state (what
+  // the webapp shows), so it is right even when nothing can be read back from
+  // Signal K and the first status frames came before the pane was listening.
+  {
+    const states = { Light_2: { state: 'ON', percent: 40 }, Light_3: { state: 'OFF', percent: 0 }, Buzzer: { state: null } }
+    const blind = { ...app, getSelfPath: () => undefined, streambundle: { getSelfBus: () => ({ onValue: () => () => {} }) } }
+    const sw4 = createVictronSwitches(blind, { controls: () => ({ getState: slug => states[slug] || null }), version: 'test' })
+    await sw4.start({ victronSwitches: true }, zcf, { bus })
+    assert.deepStrictEqual(get('/SwitchableOutput/Light_2/State'), ['i', 1])
+    assert.deepStrictEqual(get('/SwitchableOutput/Light_3/State'), ['i', 0])
+    states.Light_3 = { state: 'ON', percent: 100 }
+    sw4._resync()
+    assert.deepStrictEqual(get('/SwitchableOutput/Light_3/State'), ['i', 1])
+    const r4 = sw4.status()
+    assert.deepStrictEqual(r4.diag.seedFound, { plugin: 2, signalk: 0 })
+    assert.strictEqual(r4.diag.signalkValues, 0)
+    assert.deepStrictEqual(r4.on.sort(), ['Light_2', 'Light_3'])
+    sw4.stop()
+  }
+
+  // A start overtaken by stop() does not carry on and leave a second service.
+  {
+    const before = Object.keys(objects).length
+    for (const k of Object.keys(objects)) delete objects[k]
+    const sw3 = createVictronSwitches(app, { version: 'test' })
+    const pending = sw3.start({ victronSwitches: true }, zcf, { bus })
+    sw3.stop()
+    const st = await pending
+    assert.strictEqual(st.running, false)
+    assert.strictEqual(Object.keys(objects).length, 0)
+    assert(before > 0)
+  }
 
   // Device name: defaults to the vessel name in the ZCF; a name typed on the
   // GX is accepted, kept across restarts, and clearing it restores the default.

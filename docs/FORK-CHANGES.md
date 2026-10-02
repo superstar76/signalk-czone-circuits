@@ -91,6 +91,9 @@ One step after `zcf.load()`, shared by the webapp, the Signal K paths and the Vi
 - **Pane edits kept:** renames, groups and types made in the pane are saved.
 - **Dependency:** adds `dbus-native` (same library as other Signal K ↔ Venus plugins).
 - **Device name:** defaults to `CZone <vessel name from the ZCF>`; a name typed in the GX device list is accepted, kept in `victron-switches.json` and survives restarts and new ZCF uploads. Clearing it restores the default.
+- **State source:** the pane takes each circuit's state from the host plugin's decoded state (`getState` handed over with the send functions), the same one the webapp shows; reading it back from Signal K is the fallback. On Compass Rose the pane stayed all-off after a restart while Signal K and the webapp had the right state.
+- **One live service:** the newest instance takes the D-Bus name (replace flags); an older one that finds the name gone retires. A start overtaken by a stop does not carry on. A D-Bus connection error is logged instead of taking Signal K down (stopping the plugin while the connection was still opening crashed the server).
+- **`/victron/status`** lists the circuits the pane has as on, any that differ from Signal K (`mismatch`), and `diag` (process id, instance number, resync count and errors, whether this instance owns the service name).
 
 ## 6. ZCF parsing
 

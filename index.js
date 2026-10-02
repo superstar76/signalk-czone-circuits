@@ -1003,7 +1003,12 @@ module.exports = function (app) {
       loadConfiguredZcf()
       monitor.setControls({
         state: (slug, on) => sendCircuitState(circuitByName(slug), on),
-        brightness: (slug, level) => sendCircuitBrightness(circuitByName(slug), level)
+        brightness: (slug, level) => sendCircuitBrightness(circuitByName(slug), level),
+        // [fork] The decoded state the webapp shows, for the Victron switch pane.
+        getState: slug => {
+          const c = mapping && mapping.circuits.find(x => x.slug === slug || x.name === slug)
+          return (c && runtimeState.get(c.name)) || null
+        }
       })
       monitor.start(settings, zcfPath())
       registerCircuitPutHandlers()
