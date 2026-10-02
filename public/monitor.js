@@ -6,11 +6,11 @@
 // nav entry is selected, and reads window.czoneMonitor.count() for the badge.
 (() => {
   const API = '/plugins/signalk-czone-circuits';
-  const GROUPS = ['Batteries', 'AC Power', 'Tanks', 'Temperatures', 'Environment', 'Circuit current', 'Inputs', 'Other'];
+  const GROUPS = ['Batteries', 'Solar', 'Alternators', 'Converters', 'Wind Generators', 'AC Power', 'Tanks', 'Temperatures', 'Environment', 'Circuit current', 'Inputs', 'Other'];
   // Group icon + colour token. Colours are CSS variables in monitor.css so a
   // future theme configurator can set them; defaults reuse the webapp palette.
   const GROUP_STYLE = {
-    Batteries: ['🔋', 'batteries'], 'AC Power': ['♆', 'ac'], Tanks: ['◒', 'tanks'], Temperatures: ['🌡', 'temperatures'],
+    Batteries: ['🔋', 'batteries'], Solar: ['☀', 'solar'], Alternators: ['⚙', 'alternators'], Converters: ['⇄', 'converters'], 'Wind Generators': ['༄', 'wind'], 'AC Power': ['♆', 'ac'], Tanks: ['◒', 'tanks'], Temperatures: ['🌡', 'temperatures'],
     Environment: ['◎', 'environment'], 'Circuit current': ['⚡', 'current'], Inputs: ['⏻', 'inputs'], Other: ['•••', 'other']
   }
   const groupOf = item => GROUPS.includes(item.group) ? item.group : 'Other'
@@ -24,6 +24,7 @@
   let items = []
   let trend = { available: false }
   let visible = false
+  let groupFilter = null // one group only, chosen in the host page's category list
   let pollTimer = null
   let prefs = { showUnmapped: false }
   try { prefs = { ...prefs, ...JSON.parse(localStorage.getItem(PREF_KEY) || '{}') } } catch (_) {}
@@ -62,7 +63,7 @@
     main.appendChild(section)
     const cb = section.querySelector('#monShowAll')
     cb.checked = !!prefs.showUnmapped
-    cb.addEventListener('change', () => { prefs.showUnmapped = cb.checked; savePrefs(); render() })
+    cb.addEventListener('change', () => { prefs.showUnmapped = cb.checked; savePrefs(); render(); if (typeof window.czoneMonitorReady === 'function') window.czoneMonitorReady() })
     section.addEventListener('click', onClick)
 
     const panel = document.createElement('section')
@@ -167,7 +168,10 @@
       ? `module ${Number(item.outputs[0].module).toString(16).padStart(2, '0').toUpperCase()} / ch ${item.outputs.map(o => o.channel).join(', ')}`
       : item.instance !== undefined ? `instance ${item.instance}`
         : item.module ? `module ${Number(item.module).toString(16).padStart(2, '0').toUpperCase()}${item.input !== undefined ? ` / input ${item.input + 1}` : ''}` : ''
-    const sub = item.mapped ? (where || groupLabel(g)) : (item.note || `Waiting for ${(p && p.candidates[0]) || 'a Signal K path'}`)
+    // Not on the bus: say which NMEA 2000 instance the ZCF expects, since that
+    // is the number to set on the sending device.
+    const waiting = item.instance !== undefined ? `Nothing is sending instance ${item.instance} on NMEA 2000` : `Waiting for ${(p && p.candidates[0]) || 'a Signal K path'}`
+    const sub = item.mapped ? (where || groupLabel(g)) : (item.note || waiting)
     const live = item.mapped
     const shown = live ? item.readings.filter(r => r.path) : (p ? [p] : [])
     const active = chart.open && chart.series.some(s => s.item.id === item.id) ? 'active' : ''
@@ -192,7 +196,8 @@
     const shown = all.filter(i => prefs.showUnmapped || i.mapped)
     if (!all.length) { body.innerHTML = '<div class="empty">No meters or inputs found in the ZCF.</div>'; return }
     if (!shown.length) { body.innerHTML = '<div class="empty">Nothing from the ZCF is on the bus yet. Tick “Show unmapped” to see what is expected.</div>'; return }
-    body.innerHTML = GROUPS.map(g => {
+    if (groupFilter && !shown.some(i => groupOf(i) === groupFilter)) groupFilter = null // that group has gone
+    body.innerHTML = GROUPS.filter(g => !groupFilter || g === groupFilter).map(g => {
       const list = shown.filter(i => groupOf(i) === g)
       if (!list.length) return ''
       const live = list.filter(i => i.mapped).length
@@ -706,9 +711,15 @@
 
   // ---- Public hooks for the host page
   window.czoneMonitor = {
-    show (on) {
+    // group: show that group only (null = all). Chosen from the category list.
+    show (on, group = null) {
       mount()
-      if (visible === !!on) return
+      const filter = on && group ? group : null
+      if (visible === !!on) {
+        if (filter !== groupFilter) { groupFilter = filter; if (visible) render() }
+        return
+      }
+      groupFilter = filter
       visible = !!on
       if (chart.open) closeTrend() // a trend belongs to the view it was opened from
       document.querySelector('#monitorView').classList.toggle('show', visible)
@@ -719,6 +730,14 @@
       schedule()
     },
     count: () => monitored().filter(i => i.mapped).length,
+    // The groups on the Monitoring tab, for the host page's category list.
+    groups () {
+      const shown = monitored().filter(i => prefs.showUnmapped || i.mapped)
+      return GROUPS.map(g => {
+        const list = shown.filter(i => groupOf(i) === g)
+        return list.length ? { name: g, label: groupLabel(g), icon: groupIcon(g), color: groupVar(g), count: list.length, live: list.filter(i => i.mapped).length } : null
+      }).filter(Boolean)
+    },
     // Open the trend for a Signal K path (circuit list arrow).
     trendPath (skPath) {
       mount()

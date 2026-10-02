@@ -243,8 +243,12 @@
   const nameKey = c => c.slug || c.name;
   const stateOf = c => c.state && c.state.state === 'ON';
   const percentOf = c => c.state && Number.isFinite(c.state.percent) ? c.state.percent : null;
-  const catList = () => [...new Set(circuits.flatMap(c => c.subCategories || []))].sort((a,b) => a.localeCompare(b));
-  const countCat = cat => circuits.filter(c => (c.subCategories || []).includes(cat)).length;
+  // [fork] The category list follows the view: on AC only the categories AC
+  // circuits are in, on In Use only those of circuits that are on, and so on.
+  const inView = c => !(view==='inuse' && !stateOf(c)) && !(view==='favorites' && !favorites.has(nameKey(c))) && !(view==='ac' && c.masterCategory!=='AC') && !(view==='dc' && c.masterCategory!=='DC');
+  const scoped = () => circuits.filter(inView);
+  const catList = () => [...new Set(scoped().flatMap(c => c.subCategories || []))].sort((a,b) => a.localeCompare(b));
+  const countCat = cat => scoped().filter(c => (c.subCategories || []).includes(cat)).length;
   const activeCount = () => circuits.filter(stateOf).length;
   const masterCount = m => circuits.filter(c => c.masterCategory === m).length;
   const icon = c => categoryIcons[c] || '•';
@@ -252,9 +256,11 @@
 
   function saveFavorites() { localStorage.setItem(favoritesKey, JSON.stringify([...favorites])); }
   function setView(v) { view=v; category=null; render(); }
-  function setCategory(c) { category=c; view='category'; render(); }
+  // [fork] A category narrows the current view (AC, DC, In Use, Monitoring…)
+  // instead of replacing it; a second click on it clears it.
+  function setCategory(c) { category = category===c ? null : c; render(); }
   window.setView = setView; window.setCategory = setCategory;
-  window.czoneMonitorReady = () => renderNav();
+  window.czoneMonitorReady = () => { renderNav(); if (view==='monitor') renderCategories(); };
 
   function renderNav() {
     const items = [
@@ -262,14 +268,21 @@
       ['ac','♆','AC',masterCount('AC')], ['dc','▣','DC',masterCount('DC')],
       ['monitor','◔','Monitoring',window.czoneMonitor ? window.czoneMonitor.count() : '']
     ];
-    document.querySelector('#mainNav').innerHTML = items.map(([v,i,t,n]) => `<button class="${view===v && !category?'active':''}" onclick="setView('${v}')"><span class="nav-icon">${i}</span>${t}<span class="nav-count">${n}</span></button>`).join('');
+    document.querySelector('#mainNav').innerHTML = items.map(([v,i,t,n]) => `<button class="${view===v?'active':''}" onclick="setView('${v}')"><span class="nav-icon">${i}</span>${t}<span class="nav-count">${n}</span></button>`).join('');
   }
 
   function renderCategories() {
-    const cats = catList();
     const el = document.querySelector('#categoryNav');
     if (!el) return;
-    el.innerHTML = cats.map(c => `<button class="category-card ${category===c?'active':''}" style="--cat:${color(c)}" onclick="setCategory('${esc(c).replace(/'/g,"\\'")}')"><div class="cat-icon">${icon(c)}</div><div><strong>${esc(c)}</strong><span>${countCat(c)} circuits</span></div></button>`).join('');
+    if (view==='monitor') { // [fork] the Monitoring tab's own groups: Batteries, Solar, AC Power, Tanks…
+      const groups = window.czoneMonitor && window.czoneMonitor.groups ? window.czoneMonitor.groups() : [];
+      if (category && !groups.some(g => g.name===category)) category = null;
+      el.innerHTML = groups.map(g => `<button class="category-card ${category===g.name?'active':''}" style="--cat:${g.color}" onclick="setCategory('${esc(g.name).replace(/'/g,"\\'")}')"><div class="cat-icon">${g.icon}</div><div><strong>${esc(g.label)}</strong><span>${g.live} of ${g.count} live</span></div></button>`).join('');
+      return;
+    }
+    const cats = catList();
+    if (category && !cats.includes(category)) category = null; // not in this view any more
+    el.innerHTML = cats.map(c => `<button class="category-card ${category===c?'active':''}" style="--cat:${color(c)}" onclick="setCategory('${esc(c).replace(/'/g,"\\'")}')"><div class="cat-icon">${icon(c)}</div><div><strong>${esc(c)}</strong><span>${countCat(c)} circuit${countCat(c)===1?'':'s'}</span></div></button>`).join('');
   }
 
   function currentList() {
@@ -287,9 +300,9 @@
   }
 
   function renderCircuits() {
-    const monitoring = view === 'monitor' && !category;
+    const monitoring = view === 'monitor';
     document.querySelector('#circuits').closest('.section').style.display = monitoring ? 'none' : '';
-    if (window.czoneMonitor) window.czoneMonitor.show(monitoring);
+    if (window.czoneMonitor) window.czoneMonitor.show(monitoring, monitoring ? category : null);
     if (monitoring) return;
     const list = currentList();
     const title = category || ({all:'All Circuits',inuse:'In Use',favorites:'Favorites',ac:'AC Circuits',dc:'DC Circuits',search:'Search Results'}[view] || 'Circuits');

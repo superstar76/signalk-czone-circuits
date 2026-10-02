@@ -4,6 +4,10 @@
    Group colours are tokens so a theme configurator can set them later. */
 :root {
   --mon-batteries: #31d58a;
+  --mon-solar: #ffd866;
+  --mon-alternators: #ff8a5c;
+  --mon-converters: #7aa2ff;
+  --mon-wind: #9bd66f;
   --mon-ac: #b877ff;
   --mon-tanks: #27d7d5;
   --mon-temperatures: #ff9f58;

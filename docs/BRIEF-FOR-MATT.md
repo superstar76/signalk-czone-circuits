@@ -97,7 +97,7 @@ Ordered by impact. Each item has evidence and a suggested fix. None of these nee
   | Meitaki | five (three with no controls at all) |
   | Bench | none |
 
-  We keep them in the mapping, so their state still goes to Signal K, and leave them out of the webapp list and the Victron pane (setting "Show circuits that are not on any CZone display", default off).
+  We keep them in the mapping, so their state still goes to Signal K, and leave them out of the webapp list and the Victron pane (setting "Show circuits that are not on any CZone display", default off). Running on Compass Rose since 3 Oct: the six circuits are gone from both, everything else is unchanged.
 - **In our fork:** `lib/fork-mapping.js` (`prepareMapping`, called once after `zcf.load()`) names every category, reads the user-defined names, sets `circuit.group`, hides virtual-switch circuits (setting "Show virtual switch circuits", default off) and applies item 1's state fallback. `test/fork-mapping.test.js` covers it on all seven files.
 
 ## 4. `getPgnFromCanId` ignores the data-page bit for standard PGNs

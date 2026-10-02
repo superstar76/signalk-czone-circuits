@@ -27,6 +27,7 @@ A **Monitoring** entry in the webapp sidebar lists everything the CZone configur
   - meters wired to a CZone module are read only from that module's N2K source address (learned from CZone module status frames);
   - third-party sensors are matched on instance + source.
 - **Looks:** built from the webapp's own classes (section headers, circuit-row layout, value boxes the size of the ON/OFF button). Group colours are CSS variables, ready for a theme configurator.
+- **Groups:** DC meters are grouped by the DC type set in the Configuration Tool: Batteries, Solar, Alternators, Converters, Wind Generators. In the webapp's side list, the categories follow the view: on AC, DC, In Use or Favourites only the categories of the circuits in that view (a category narrows the view, a second click clears it); on Monitoring the list is the monitoring groups, and choosing one shows that group only.
 
 ## 2. Circuit current
 

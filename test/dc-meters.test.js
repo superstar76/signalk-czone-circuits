@@ -33,6 +33,17 @@ const dcMeters = name => Object.fromEntries(parseMeters(fs.readFileSync(fixture(
   assert.strictEqual(dcMeters('Persevere-14.07.25.zcf').Solar.dcTypeName, 'solar')
 }
 
+// --- Monitoring groups follow the DC type: a solar meter is not a battery.
+{
+  const { buildCatalog } = require('../lib/monitor/catalog')
+  const groups = name => Object.fromEntries(buildCatalog(fs.readFileSync(fixture(name))).items.filter(i => i.source === 'zcf-meter').map(i => [i.name, i.group]))
+  assert.deepStrictEqual(groups('Compass-Rose-03.10.26.zcf'), {
+    'House Battery': 'Batteries', Solar: 'Solar', 'Start Battery': 'Batteries', Alternator: 'Alternators', 'Inverter Output': 'AC Power', 'AC Input': 'AC Power' })
+  const ss = groups('SugarShack-20260927-01.zcf')
+  assert.deepStrictEqual([ss['Solar Port'], ss['Port Alternator'], ss['House Battery'], ss['Inverter 230V']], ['Solar', 'Alternators', 'Batteries', 'AC Power'])
+  assert.strictEqual(groups('TestBench-2026-10-01.zcf')['5V System - MI'], 'Converters')
+}
+
 // --- PGN 127506 first frame: what the device says the instance is.
 assert.deepStrictEqual(decodeDcSender(127506, Buffer.from('400B2B0103FFFFFF', 'hex')), { instance: 1, dcType: 3, soc: false })
 assert.deepStrictEqual(decodeDcSender(127506, Buffer.from('A00B9F000054FFFF', 'hex')), { instance: 0, dcType: 0, soc: true })
