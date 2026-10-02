@@ -28,7 +28,32 @@ Ordered by impact. Each item has evidence and a suggested fix. None of these nee
 - **Interim in our fork:** `lib/status-fallback.js` does exactly that, called once after `zcf.load()` in `loadConfiguredZcf`; `test/status-fallback.test.js` replays the frames above. Drop it when the parser covers this.
 - **Also seen in that capture:** the plugin's own commands go out correctly (`1CFF0065  27 99 0F 00 00 03 F1 08` then `… 40 08`, device id 3). The display uses its own dipswitch (04) and trailer `00`.
 
-## 2. `getPgnFromCanId` ignores the data-page bit for standard PGNs
+## 2. Control X PLUS sends current and level in PGN 130825, not 130822
+
+**New. Affects `signalk-czone` (current) and brightness/level in `signalk-czone-circuits`.**
+
+- **Symptom (Compass Rose, two Control X PLUS, no CZone display):** no circuit current at all. In ten minutes there is not one `27 99` frame on 130822 or 130817. (The only 130822 traffic is Navico's, `13 99`, from the MFD.)
+- **Where it is:** PGN 130825, a 27-byte fast packet from each module, pages 0–2 cycling about every 2 s, sent without any display or request:
+
+  ```
+  27 99 <module> <page> 00  + 8 records of 22 bits, least significant bit first
+      bits 0–10   current, 0.1 A
+      bits 11–21  level: 0 = off, 1000 = on
+  record n on page p = output channel p*8 + n
+  ```
+
+- **Evidence:** "Lights" (module 2, channel 4) switched on and off changes only record 4 of module 02 page 0:
+
+  ```
+  off  27 99 02 00 00 | 00 40 1F 00 D0 17 00 00 00 00 00 00 00 40 00 D0 07 00 00 00 00 00
+  on   27 99 02 00 00 | 00 40 1F 00 D0 17 00 00 00 00 00 05 40 5F 00 D0 07 00 00 00 00 00
+  ```
+
+  → level 0 / 0 A and level 1000 / 0.5 A. Every record with level 1000 matches a bit set in that module's 65284 bitmap (module 02: channels 0, 1, 4, 5, 9, 10, 11, 13, 16; module 01: 2, 3, 16), and the loads are believable (Freezer 3.0–3.1 A, water pump on but idle 0 A, anchor light 0.1 A).
+- **Notes:** a record that is off can still carry a raw current of 1 (0.1 A), so treat level 0 as 0 A, as with the Output Interface. Your fast-packet reassembler only accepts 130817/130822, so 130825 needs adding there too.
+- **In our fork:** `lib/monitor/currents.js` decodes it (`decodePackedTable`); `test/control-x-plus.test.js` has the captured payloads.
+
+## 3. `getPgnFromCanId` ignores the data-page bit for standard PGNs
 
 - **Symptom:** any PGN with DP = 1 outside the CZone `0xFFxx` range comes out wrong.
 - **Evidence:**
@@ -42,13 +67,13 @@ Ordered by impact. Each item has evidence and a suggested fix. None of these nee
 - **Fix:** `pgn = (dp << 16) | (pf << 8) | (pf >= 240 ? ps : 0)` with `dp = (canId >>> 24) & 1`. Keep your special case that maps CAN `0xFF04` to 65284.
 - **Impact today:** none on circuit control, but anything you decode beyond CZone PGNs will be misidentified.
 
-## 3. Structural parser: hidden duplicate circuits not dropped
+## 4. Structural parser: hidden duplicate circuits not dropped
 
 - **Symptom:** Meitaki lists **Audible Alarm** three times (IDs 1, 2 and 32). The Configuration Tool shows it once.
 - **Cause:** the circuit-table parser (now in `signalk-czone-zcf`) is based on an earlier version of our parser, without the `internal` rule. A circuit with **no controls** that shares its name with a circuit that **has** controls is an internal helper (Meitaki IDs 1 and 2 beside the user-facing 32).
 - **Fix:** add `markInternalDuplicates` from our `lib/zcf-circuits.js` and classify those records as `kind: 'internal'`. Our `test/zcf-circuits.test.js` checks the exact Configuration Tool circuit list for TestBench, Compass Rose, Meitaki, Sel Citron and SugarShack. It passes against our parser; `signalk-czone-zcf` beta.1 still returns three Audible Alarm circuits for Meitaki.
 
-## 4. Meters: list byte is a meter id, not the NMEA instance
+## 5. Meters: list byte is a meter id, not the NMEA instance
 
 Only matters if you start using meters (we use them for monitoring in the fork).
 
@@ -59,7 +84,7 @@ Only matters if you start using meters (we use them for monitoring in the fork).
   - 5V System - MI has meterId 1 and instance 1. The Meter Interface sends instance 1.
 - **Coverage:** all DC and AC meters in all 8 sample files resolve this way. See `docs/ZCF-FORMAT.md` in our fork.
 
-## 5. PGN 130817 isn't used for levels
+## 6. PGN 130817 isn't used for levels
 
 - **Symptom:** `decodeDcStatePacket` returns early unless the PGN is 130822.
 - **Evidence:** the bench **Output Interface** (a DC module) sends its output table as **130817**, with the header the other way round: `27 99 <page> <module>`.
@@ -67,13 +92,13 @@ Only matters if you start using meters (we use them for monitoring in the fork).
 - **Fix:** accept both PGNs, swapping byte 2/3 for 130817. Your `decodeCzoneHeader` already does this.
 - **Related:** on the bench OI the current byte reads 1 (0.1 A) on every output, **on or off**. Treat level `0x0400` as 0 A.
 
-## 6. Signal K PUT on `electrical.czone.<slug>.switch.state`
+## 7. Signal K PUT on `electrical.czone.<slug>.switch.state`
 
 - **Symptom:** a PUT issued in-process with `app.putSelfPath('electrical.czone.Light_1.switch.state', true)` was accepted but **didn't switch the circuit**. Calling `sendCircuitState()` directly does.
 - **Status:** not fully diagnosed. It may be how Signal K routes a PUT to a handler registered with a source (`PLUGIN_ID`).
 - **Worth testing:** a PUT via REST, `PUT /signalk/v1/api/vessels/self/electrical/czone/Light_1/switch/state` `{"value": true}`, since other apps (KIP, Node-RED) would use that.
 
-## 7. Earlier items, for completeness
+## 8. Earlier items, for completeness
 
 - **Modes vs group circuits (SugarShack):** "All Lights On", "Welcome Home" and so on are ordinary multi-output circuits in the file. The four real Modes are the category-0 records.
 - **`signalk-czone` current mapping:** it was mapping currents to the previous circuit's output (old parser). Commit `e67c29d` moved it to the structural parser, which should fix it; not yet re-checked live. Our fork decodes circuit current inside `signalk-czone-circuits` (see `FORK-CHANGES.md`), which may be useful when you combine the two projects.

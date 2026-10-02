@@ -16,11 +16,12 @@ const bus = {
   invoke: (msg, cb) => cb(new Error('no localsettings'))
 }
 const puts = []
+const sk = { 'electrical.czone.Light_2.switch.state': { value: true } }
 let deltaListener = null
 const app = {
   getDataDirPath: () => fs.mkdtempSync(path.join(os.tmpdir(), 'vsw-')),
   putSelfPath: (p, v, cb) => { puts.push([p, v]); if (cb) cb({ state: 'COMPLETED', statusCode: 200 }) },
-  getSelfPath: p => (p === 'electrical.czone.Light_2.switch.state' ? { value: true } : undefined),
+  getSelfPath: p => sk[p],
   streambundle: { getSelfBus: () => ({ onValue: fn => { deltaListener = fn; return () => {} } }) }
 }
 const zcf = path.join(__dirname, 'fixtures', 'TestBench-2026-10-01.zcf')
@@ -64,9 +65,11 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(status => {
   // A rename from the GUI keeps the name, not the amps
   objects['/SwitchableOutput/Light_2/Settings/CustomName'].SetValue([[{ type: 's' }], ['Saloon · 1.5 A']])
   assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Settings/CustomName'), ['s', 'Saloon · 1.5 A'])
+  sk['electrical.czone.Light_2.switch.state'] = { value: false }
   deltaListener({ path: 'electrical.czone.Light_2.switch.state', value: false })
   assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Settings/CustomName'), ['s', 'Saloon'])
   // CZone -> pane: a state delta updates State and Status and signals it
+  sk['electrical.czone.Light_1.switch.state'] = { value: true }
   deltaListener({ path: 'electrical.czone.Light_1.switch.state', value: true })
   assert.deepStrictEqual(get('/SwitchableOutput/Light_1/State'), ['i', 1])
   assert(signals.some(s => s.p === '/SwitchableOutput/Light_1/State' && s.member === 'PropertiesChanged'))
@@ -74,6 +77,24 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(status => {
   const items = objects['/'].GetItems()
   assert(items.length > 60)
   assert(items.every(([p, kv]) => p.startsWith('/') && kv[0][0] === 'Value' && kv[1][0] === 'Text'))
+  // A circuit that was already on before this service was listening (Compass
+  // Rose, Anchor Light): no delta ever comes, the regular re-sync picks it up.
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_5/State'), ['i', 0])
+  sk['electrical.czone.Light_5.switch.state'] = { value: true }
+  sw._resync()
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_5/State'), ['i', 1])
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_5/Status'), ['i', 0x09])
+  // A pane tap is not undone by the re-sync while CZone has yet to confirm…
+  sk['electrical.czone.Light_3.switch.state'] = { value: false }
+  assert.strictEqual(objects['/SwitchableOutput/Light_3/State'].SetValue([[{ type: 'i' }], [1]]), 0)
+  sw._resync()
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_3/State'), ['i', 1])
+  // …but a command CZone never acted on snaps back after the grace period.
+  const realNow = Date.now
+  Date.now = () => realNow() + 6000
+  sw._resync()
+  Date.now = realNow
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_3/State'), ['i', 0])
   sw.stop()
   console.log('Victron switch pane tests passed')
 }).catch(err => { console.error(err); process.exit(1) })

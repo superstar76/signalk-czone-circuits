@@ -30,7 +30,7 @@ A **Monitoring** entry in the webapp sidebar lists everything the CZone configur
 
 ## 2. Circuit current
 
-- **Decoding:** CZone's output tables (PGN 130822 for DC modules; 130817 for AC modules and the Output Interface) are decoded per channel, 0.1 A resolution, and mapped to circuits using the structural parser's outputs.
+- **Decoding:** CZone's output tables are decoded per channel, 0.1 A resolution, and mapped to circuits using the structural parser's outputs: PGN 130822 (DC modules), 130817 (AC modules and the Output Interface) and 130825 (Control X PLUS, a bit-packed form of the same table that needs no CZone display on the network).
 - **Published** at `electrical.czone.<slug>.current`, next to Matt's `.switch.state` / `.switch.brightness`.
 - **Shown** under ON on each circuit's button.
 - **Trend:** the › arrow beside ON/OFF opens that circuit's current trend.

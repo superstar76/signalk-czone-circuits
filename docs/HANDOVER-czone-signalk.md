@@ -77,6 +77,7 @@ Your fork's `main` branch is untouched and behind Matt; ignore it (or *Sync fork
 | 0xFF04/15/16/1C | Module status frames; **byte 2 = module dipswitch**, used to learn module → N2K source address |
 | **130822** (DC modules) | Output table, fast packet, 28 bytes: `27 99 <module> <page>` + 8 × `[current][level u16 LE]` |
 | **130817** (AC modules **and** the Output Interface) | Same, but `27 99 <page> <module>` |
+| **130825** (**Control X PLUS**) | Same table, bit-packed: fast packet, 27 bytes: `27 99 <module> <page> 00` + 8 × 22 bits, LSB first: 11 bits current (0.1 A), 11 bits level (0 off, 1000 on). These modules send no 130822/130817. Proven on Compass Rose, 3 Oct 2026, with no CZone display on the network |
 
 Output table details:
 
@@ -196,6 +197,16 @@ Plain CSV files, no database. Nothing is built or held without storage: with no 
 7. GitHub web upload: nothing happens until **Commit changes**. Hidden files (`.gitignore`) may not upload from Windows.
 
 ---
+
+### Compass Rose (installed 2–3 October 2026)
+
+- Two Control X PLUS modules (dipswitch 01 on N2K address 0, 02 on address 2), a keypad (dipswitch 04, address 3), a Simrad MFD (address 5). **No CZone display.**
+- The February plugin (`signalk-czone-switch-control`) is removed; backups of it, the Signal K settings and the trend data are on Matthew's laptop. Its leftovers were what blocked Signal K app updates.
+- Its trend history (30 s files under Venus/VRM instance paths) is read in place through `aliases.json` in the trend folder.
+- **No ZCF status table** on this configuration: circuit state is inferred (bit = output channel) by `lib/status-fallback.js` until Matt's parser handles it.
+- **Circuit current** comes from PGN 130825 (above).
+- Fast update when only the plugin's own files change (no npm): unpack the GitHub tarball over `node_modules/signalk-czone-circuits`, `chown`, restart.
+- Open: the Cerbo is heavily loaded (load average ~3.4 on two cores); two N2K devices both send battery instance 0; AC meters and the fridge sensor are not on the bus.
 
 ## 7. Next steps
 
