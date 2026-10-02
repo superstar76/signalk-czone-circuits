@@ -47,8 +47,10 @@ A **Monitoring** entry in the webapp sidebar lists everything the CZone configur
   | Summary | `<series>/summary/<YYYY-MM>.csv` | `bucket,min,avg,max` per 10 minutes, from every sample |
 
 - **Retention:** kept until storage runs low; then the oldest full-detail days are removed first, summaries last. Recording never stops. An optional setting caps full detail at 31 / 90 / 365 days.
+- **Earlier history:** data already on the card is read in place and its summaries built once at start. Old folder names are matched automatically where they are one of the reading's Signal K paths; others are mapped in `aliases.json` in the trend folder.
 - **Sizing:** 200 points at 10 s is at most 12.6 GB/year of full detail plus 0.34 GB/year of summaries. Minimum card: 16 GB.
-- **Chart:** an in-page panel with 1 h / 24 h / 7 d / 31 d / 90 d / 1 y, min/avg/max/now tiles, hover crosshair, and gaps where data is missing. Ranges over 48 h read the summaries and draw the average with a min–max band, so short spikes stay visible.
+- **Chart:** an in-page panel with 1 h / 24 h / 7 d / 31 d / 90 d / 1 y or a **custom period** (from/to), min/avg/max/now tiles, hover crosshair, and gaps where data is missing. Ranges over 48 h read the summaries and draw the average with a min–max band, so short spikes stay visible.
+- **Several values on one chart:** "Add value" puts any other trended value (meter, sender or circuit current) on the chart, up to 5. Each unit gets its own scale (first on the left, others on the right, ticks on shared grid lines); "Stacked" shows one plot per unit on the same time axis instead. A legend row per value gives now/min/avg/max; the crosshair reads every value at that time.
 - **Storage:**
   - Victron GX: SD card or USB stick only, never internal flash. With no card nothing is written or held in memory;
   - other platforms: the Signal K data folder;

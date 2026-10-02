@@ -87,6 +87,91 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   assert(week.gapMs >= BUCKET_MS)
 }
 
+// --- Custom period: any from/to; full detail up to 48 h, summaries beyond,
+//     and summaries for an old period whose full detail has been removed.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trend-'))
+  const store = createTrendStore({ directory: dir })
+  const t0 = Date.UTC(2026, 7, 1)
+  for (let t = t0; t < t0 + 10 * 86400e3; t += 300e3) store.record('v', (t - t0) / 86400e3, t) // value = days since t0
+  store.close()
+  const now = t0 + 30 * 86400e3
+  const day3 = store.read('v', { from: t0 + 3 * 86400e3, to: t0 + 4 * 86400e3 }, now)
+  assert.strictEqual(day3.tier, 'raw')
+  assert.strictEqual(day3.range, 'custom')
+  assert.deepStrictEqual([day3.start, day3.end], [t0 + 3 * 86400e3, t0 + 4 * 86400e3])
+  assert(day3.data.length > 100 && day3.data.every(r => r[0] >= day3.start && r[0] <= day3.end && r[1] >= 3 && r[1] <= 4))
+  const week = store.read('v', { from: t0 + 2 * 86400e3, to: t0 + 9 * 86400e3 }, now)
+  assert.strictEqual(week.tier, 'summary')
+  assert(week.data.every(r => r[0] >= week.start && r[0] <= week.end && r[2] >= 2 && r[3] <= 9.01))
+  assert.strictEqual(store.read('v', { from: t0 + 20 * 86400e3, to: t0 + 21 * 86400e3 }, now).data.length, 0) // nothing recorded then
+  assert.strictEqual(store.read('v', { from: t0 + 2, to: t0 + 1 }, now).error, 'bad_range')
+  assert.strictEqual(store.read('v', { from: 'x', to: t0 }, now).error, 'bad_range')
+  // Full detail for day 3 removed (space guard): the same period still charts from summaries.
+  fs.unlinkSync(path.join(dir, 'v', '2026-08-04.csv'))
+  const again = store.read('v', { from: t0 + 3 * 86400e3, to: t0 + 4 * 86400e3 }, now)
+  assert.strictEqual(again.tier, 'summary')
+  assert(again.data.length >= 140)
+}
+
+// --- History from the February plugin (30 s rows, no summaries, folder named
+//     after the bare path): read in place, summaries built once, originals untouched.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trend-'))
+  const old = path.join(dir, 'electrical.batteries.0.voltage')
+  fs.mkdirSync(old)
+  const t0 = Date.UTC(2026, 8, 26)
+  for (let day = 0; day < 6; day++) {
+    const rows = []
+    for (let t = t0 + day * 86400e3; t < t0 + (day + 1) * 86400e3; t += 30e3) rows.push(`${t},${12 + day + (t % 3600e3 === 0 ? 1 : 0)}`)
+    fs.writeFileSync(path.join(old, `${new Date(t0 + day * 86400e3).toISOString().slice(0, 10)}.csv`), rows.join('\n') + '\n')
+  }
+  const before = fs.readdirSync(old).map(f => fs.readFileSync(path.join(old, f), 'utf8'))
+  const now = t0 + 6 * 86400e3 + 5 * 60e3
+  const series = 'electrical.batteries.0.voltage@czone-04' // the new name for the same meter
+  const store = createTrendStore({ directory: dir })
+  store.setAliases(new Map([[series, ['electrical.batteries.0.voltage']]]))
+  // Full detail is there straight away…
+  const day = store.read(series, { from: t0 + 86400e3, to: t0 + 2 * 86400e3 - 1 }, now)
+  assert.strictEqual(day.tier, 'raw')
+  assert(day.data.length > 100 && day.data.every(r => r[1] >= 13 && r[1] <= 14))
+  // …long ranges after the summaries are built.
+  const r = store.backfill(series, now)
+  assert.deepStrictEqual([r.done, r.buckets, r.days], [true, 6 * 144, 6])
+  const week = store.read(series, '7d', now)
+  assert.strictEqual(week.tier, 'summary')
+  assert(week.points <= 400 && week.points > 300)
+  assert.strictEqual(Math.min(...week.data.map(d => d[2])), 12)
+  assert.strictEqual(Math.max(...week.data.map(d => d[3])), 18) // the hourly +1 spikes survive
+  const sum = fs.readFileSync(path.join(dir, sanitizePath(series), 'summary', '2026-09.csv'), 'utf8').trim().split('\n')
+  assert.strictEqual(sum.length, 5 * 144)
+  assert.strictEqual(sum[0], `${t0},12,12.05,13`) // 20 samples, one of them 13
+  // Once only, and the February files are exactly as they were.
+  assert.strictEqual(store.backfill(series, now).done, false)
+  assert.deepStrictEqual(fs.readdirSync(old).map(f => fs.readFileSync(path.join(old, f), 'utf8')), before)
+  // New samples carry on in the new folder; buckets already summarised are not redone.
+  store.record(series, 20, now)
+  store.close()
+  assert(fs.existsSync(path.join(dir, sanitizePath(series), '2026-10-02.csv')))
+  assert.strictEqual(store.read(series, '1h', now + 60e3).data.slice(-1)[0][1], 20)
+}
+
+// --- Backfill fills only what is missing: live summaries are kept, the bucket
+//     still being measured is left alone, a series with no data is retried later.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trend-'))
+  const store = createTrendStore({ directory: dir })
+  assert.strictEqual(store.backfill('v', Date.UTC(2026, 8, 2)).done, false) // nothing recorded yet
+  const t0 = Date.UTC(2026, 8, 1, 12)
+  fs.mkdirSync(path.join(dir, 'v', 'summary'), { recursive: true })
+  fs.writeFileSync(path.join(dir, 'v', '2026-09-01.csv'), [0, 1, 2, 3].map(i => `${t0 + i * 600e3 + 1000},${i}`).join('\n') + '\n')
+  fs.writeFileSync(path.join(dir, 'v', 'summary', '2026-09.csv'), `${t0 + 600e3},9,9,9\n`) // bucket 1 summarised live
+  const r = store.backfill('v', t0 + 3 * 600e3 + 5000) // bucket 3 is still open
+  assert.deepStrictEqual([r.done, r.buckets], [true, 2])
+  const rows = fs.readFileSync(path.join(dir, 'v', 'summary', '2026-09.csv'), 'utf8').trim().split('\n')
+  assert.deepStrictEqual(rows, [`${t0 + 600e3},9,9,9`, `${t0},0,0,0`, `${t0 + 2 * 600e3},2,2,2`])
+}
+
 // --- A year of summaries comes back as a few hundred points with the extremes kept.
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trend-'))
@@ -191,6 +276,39 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
     ['Buzzer', 'Light 1', 'Light 2', 'Light 3', 'Light 4', 'Light 5'])
 }
 
+// Three days of 30 s rows ending an hour ago, as the February plugin wrote them.
+function writeFebruary (folder, value) {
+  fs.mkdirSync(folder, { recursive: true })
+  const end = Math.floor(Date.now() / 600e3) * 600e3 - 3600e3
+  const byDay = new Map()
+  for (let t = end - 3 * 86400e3; t < end; t += 30e3) { const k = new Date(t).toISOString().slice(0, 10); byDay.set(k, (byDay.get(k) || '') + `${t},${value}\n`) }
+  for (const [k, text] of byDay) fs.writeFileSync(path.join(folder, `${k}.csv`), text)
+  return end
+}
+
+// --- A meter wired to a CZone module is recorded as "<path>@czone-<module>";
+//     February history under the bare path is still found for it.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mon-'))
+  const zcfFile = path.join(dir, 'installation.zcf')
+  fs.copyFileSync(path.join(__dirname, 'fixtures', 'TestBench.zcf'), zcfFile)
+  const monitor = createMonitor({ getSelfPath: () => undefined, debug: () => {} })
+  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  const routes = {}
+  monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
+  const call = (p, query = {}) => { let out; routes[p]({ query }, { json: v => { out = v } }); return out }
+  writeFebruary(path.join(dir, 'trends', 'electrical.batteries.0.voltage'), 12.4)
+  const house = call('/monitor/items').items.find(i => i.name === 'House Battery').readings.find(r => r.key === 'voltage')
+  assert.strictEqual(house.series, null) // not live
+  assert.strictEqual(house.history, 'electrical.batteries.0.voltage@czone-04')
+  assert.strictEqual(monitor.backfillTrends().buckets, 3 * 144)
+  const week = call('/trend', { path: house.history, range: '7d' })
+  assert.strictEqual(week.tier, 'summary')
+  assert(week.points > 150 && week.data.every(d => d[1] === 12.4))
+  assert(fs.existsSync(path.join(dir, 'trends', 'electrical.batteries.0.voltage_czone-04', 'summary')))
+  monitor.stop()
+}
+
 // --- End to end: fake Signal K, monitor samples and serves routes.
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mon-'))
@@ -212,6 +330,56 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name))
   assert.deepStrictEqual(trend.data.map(d => d[1]), [0.42])
   assert.strictEqual(call('/trend/status').available, true)
   assert.strictEqual(call('/trend/status').sampleSeconds, 10) // default
+  { // Compass Rose: February history sits in a folder of the same name (virtual meter, bare path)
+    const end = writeFebruary(path.join(dir, 'trends', 'electrical.batteries.0.voltage'), 12.4)
+    const house = call('/monitor/items').items.find(i => i.name === 'House Battery').readings.find(r => r.key === 'voltage')
+    assert.strictEqual(house.history, 'electrical.batteries.0.voltage')
+    assert.strictEqual(call('/trend', { path: house.history, from: String(end - 86400e3), to: String(end) }).tier, 'raw') // readable at once
+    const b = monitor.backfillTrends()
+    assert.deepStrictEqual([b.state, b.series, b.buckets], ['done', 1, 3 * 144])
+    const week = call('/trend', { path: house.history, range: '7d' })
+    assert.strictEqual(week.tier, 'summary')
+    assert(week.data.filter(d => d[1] === 12.4).length > 150)
+    assert.strictEqual(call('/trend/status').backfill.state, 'done')
+  }
+  { // history under an unrelated name (Venus/VRM instance path): mapped in aliases.json
+    writeFebruary(path.join(dir, 'trends', 'electrical.batteries.239.current'), -6.5)
+    const cur = 'electrical.batteries.0.current'
+    assert.strictEqual(call('/trend', { path: cur, range: '7d' }).data.length, 0)
+    fs.writeFileSync(path.join(dir, 'trends', 'aliases.json'), JSON.stringify({ [cur]: ['electrical.batteries.239.current'] }))
+    assert.strictEqual(monitor.backfillTrends().buckets, 3 * 144)
+    const week = call('/trend', { path: cur, range: '7d' })
+    assert.strictEqual(week.tier, 'summary')
+    assert(week.points > 150 && week.data.every(d => d[1] === -6.5))
+    assert.strictEqual(call('/trend/status').aliases.file, 1)
+    // …and it holds for the reading's other paths too (State of charge has two).
+    writeFebruary(path.join(dir, 'trends', 'electrical.batteries.239.capacity.stateOfCharge'), 0.85)
+    fs.writeFileSync(path.join(dir, 'trends', 'aliases.json'), JSON.stringify({ [cur]: ['electrical.batteries.239.current'], 'electrical.batteries.0.capacity.stateOfCharge': ['electrical.batteries.239.capacity.stateOfCharge'] }))
+    monitor.backfillTrends() // the mapping file is read at start and again here
+    assert(call('/trend', { path: 'electrical.batteries.0.stateOfCharge', from: String(Date.now() - 2 * 86400e3), to: String(Date.now()) }).data.length > 100)
+    // The Signal K path the February plugin used for a sensor is found without a mapping.
+    writeFebruary(path.join(dir, 'trends', 'environment.inside.engineRoom.temperature'), 301.15)
+    monitor.backfillTrends()
+    const er = call('/trend', { path: 'environment.inside.engineRoom.2.temperature', range: '7d' })
+    assert(er.points > 150 && er.data.every(d => d[1] === 301.15))
+    // A broken mapping file is reported, not fatal.
+    fs.writeFileSync(path.join(dir, 'trends', 'aliases.json'), '{ not json')
+    monitor.backfillTrends()
+    assert(call('/trend/status').aliases.error)
+    assert(call('/trend', { path: 'environment.inside.engineRoom.2.temperature', range: '7d' }).points > 150)
+  }
+  { // every reading says where its history is, live or not
+    const all = call('/monitor/items').items.flatMap(i => i.readings).filter(r => r.candidates.length)
+    assert(all.length > 0 && all.every(r => typeof r.history === 'string'))
+    assert(all.filter(r => r.series).every(r => r.history === r.series))
+  }
+  { // custom period on the route
+    const to = Date.now()
+    const r = call('/trend', { path: 'electrical.batteries.0.voltage', from: String(to - 3600e3), to: String(to) })
+    assert.strictEqual(r.range, 'custom')
+    assert.deepStrictEqual([r.start, r.end], [to - 3600e3, to])
+    assert.strictEqual(call('/trend', { path: 'x', from: '5', to: '1' }).error, 'bad_range')
+  }
   monitor.stop()
   monitor.start({ trendDirectory: path.join(dir, 'trends'), trendSampleSeconds: 30 }, zcfFile)
   assert.strictEqual(call('/trend/status').sampleSeconds, 30)

@@ -140,12 +140,17 @@ Plain CSV files, no database. Nothing is built or held without storage: with no 
 
 - **Retention:** nothing is deleted by age by default ("Keep full-detail trend data for" can cap it at 31 / 90 / 365 days).
 - **Space guard (hourly):** when free space drops below 5% or 200 MB on a card (10% or 1 GB on a shared disk), the oldest full-detail days go first; summaries only when no old full detail is left. Today's file and this month's summary are never removed, so recording never stops.
+- **Earlier history** (e.g. the February plugin's 30 s files) is read in place, never moved or changed:
+  - found automatically under a reading's other paths (sensor recorded as `environment.inside.engineRoom.temperature`, now `…engineRoom.2.temperature`) and under the bare path for module-wired meters (now `…@czone-04`);
+  - for unrelated names (Venus/VRM instance paths such as `electrical.batteries.239.voltage`), map them in `<trend folder>/aliases.json`: `{ "<series>": ["<old folder>"] }`;
+  - ten-minute summaries are built from it once, 20 s after start (`/trend/status` → `backfill`, `aliases`).
 - **Sizing:** 200 points at 10 s is at most 12.6 GB/year of full detail (every sample different; write-on-change makes it far less in practice) plus 0.34 GB/year of summaries. **Minimum card: 16 GB.**
 
 **UI:**
 
 - **Monitoring tab:** one section per group; a value box per live reading; click a box for its trend.
 - **Circuit list:** the ON button shows amps; the › arrow opens that circuit's current trend.
+- **Trend panel:** preset ranges or a custom from/to period (`/trend?path=&from=<ms>&to=<ms>`). "Add value" overlays up to 5 values of any kind (e.g. fridge temperature with battery amps); one scale per unit, or "Stacked" for one plot per unit. The first value keeps its group colour; added values take fixed palette colours.
 
 ### Victron switch pane (`lib/victron/`)
 

@@ -16,7 +16,7 @@
   const groupOf = item => GROUPS.includes(item.group) ? item.group : 'Other'
   const groupVar = g => `var(--mon-${(GROUP_STYLE[g] || GROUP_STYLE.Other)[1]})`
   const groupIcon = g => (GROUP_STYLE[g] || GROUP_STYLE.Other)[0]
-  const RANGES = [['1h', '1 h'], ['24h', '24 h'], ['7d', '7 days'], ['31d', '31 days'], ['90d', '90 days'], ['1y', '1 year']];
+  const RANGES = [['1h', '1 h'], ['24h', '24 h'], ['7d', '7 d'], ['31d', '31 d'], ['90d', '90 d'], ['1y', '1 y']];
   const RANGE_MS = { '1h': 3600e3, '24h': 86400e3, '7d': 7 * 86400e3, '31d': 31 * 86400e3, '90d': 90 * 86400e3, '1y': 365 * 86400e3 };
   const PREF_KEY = 'signalk-czone-circuits:monitor';
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -70,18 +70,39 @@
     panel.id = 'monPanel'
     panel.innerHTML = `
       <div class="section-head"><span class="mon-trend-icon" id="monIcon"></span><div><h2 id="monTitle"></h2><span class="subtle" id="monSub"></span></div><button class="sort mon-close" aria-label="Close trend" data-close>✕ Close</button></div>
-      <div class="mon-controls"><div class="mon-seg" id="monReadings"></div><div class="mon-seg" id="monRanges"></div></div>
+      <div class="mon-controls"><div class="mon-seg" id="monReadings"></div><div class="mon-seg" id="monRanges"></div><div class="mon-seg" id="monMode"></div><button class="sort mon-add" id="monAdd">＋ Add value</button></div>
+      <div class="mon-custom" id="monCustom"><label>From <input type="datetime-local" id="monFrom"></label><label>To <input type="datetime-local" id="monTo"></label><button class="sort" id="monApply">Apply</button><span id="monCustomMsg"></span></div>
+      <div class="mon-picker" id="monPicker"><input type="search" id="monSearch" placeholder="Search values…" aria-label="Search values"><div id="monPickList"></div></div>
       <div class="mon-stats" id="monStats"></div>
+      <div class="mon-legend" id="monLegend"></div>
       <div class="mon-chart"><canvas id="monCanvas"></canvas><div class="mon-tip" id="monTip"></div><div class="mon-chart-msg" id="monMsg"></div></div>`
     main.insertBefore(panel, section)
     panel.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeTrend() })
-    panel.querySelector('#monReadings').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { chart.key = b.dataset.key; loadTrend() } })
-    panel.querySelector('#monRanges').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { chart.range = b.dataset.range; loadTrend() } })
+    panel.querySelector('#monReadings').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setPrimaryReading(b.dataset.key) })
+    panel.querySelector('#monRanges').addEventListener('click', e => {
+      const b = e.target.closest('button')
+      if (!b) return
+      if (b.dataset.range === 'custom') { chart.customOpen = true; controls(); return } // nothing reloads until Apply
+      chart.customOpen = false; chart.custom = null; chart.range = b.dataset.range
+      loadTrend()
+    })
+    panel.querySelector('#monApply').addEventListener('click', applyCustom)
+    panel.querySelector('#monCustom').addEventListener('keydown', e => { if (e.key === 'Enter') applyCustom() })
+    panel.querySelector('#monMode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { chart.mode = b.dataset.mode; prefs.trendMode = chart.mode; savePrefs(); chart.hover = null; controls(); draw() } })
+    panel.querySelector('#monAdd').addEventListener('click', () => {
+      chart.picker = !chart.picker
+      if (chart.picker) panel.querySelector('#monSearch').value = ''
+      controls()
+      if (chart.picker) panel.querySelector('#monSearch').focus()
+    })
+    panel.querySelector('#monSearch').addEventListener('input', pickerList)
+    panel.querySelector('#monPickList').addEventListener('click', e => { const b = e.target.closest('[data-add]'); if (b) addSeries(b.dataset.add, b.dataset.key) })
+    panel.querySelector('#monLegend').addEventListener('click', e => { const b = e.target.closest('[data-remove]'); if (b) removeSeries(b.dataset.remove) })
     const canvas = panel.querySelector('#monCanvas')
     canvas.addEventListener('mousemove', e => hover(e.offsetX))
-    canvas.addEventListener('mouseleave', () => { chart.hoverIdx = null; draw(); document.querySelector('#monTip').style.display = 'none' })
+    canvas.addEventListener('mouseleave', () => { chart.hover = null; draw(); document.querySelector('#monTip').style.display = 'none' })
     canvas.addEventListener('touchmove', e => { const r = canvas.getBoundingClientRect(); hover(e.touches[0].clientX - r.left) }, { passive: true })
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTrend() })
+    document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (chart.picker) { chart.picker = false; controls() } else closeTrend() })
     window.addEventListener('resize', () => { if (chart.open) draw() })
   }
 
@@ -118,6 +139,10 @@
 
   // ---- Rendering
   const primary = item => item.readings.find(r => r.path) || item.readings[0]
+  // Where a reading's trend is stored: its live series, or the one it was last
+  // recorded under (a sensor that is switched off still has a history).
+  const trendKey = r => r.series || r.history || null
+  const trendable = item => { const live = item.readings.filter(r => r.series); return live.length ? live : item.readings.filter(r => r.history) }
   const sortByName = (a, b) => a.name.localeCompare(b.name)
 
   // Rows reuse the webapp's own circuit-row classes so Monitoring looks like
@@ -129,7 +154,7 @@
   // One value box per live reading (e.g. battery V / A / %), each opens its trend.
   function valueBox (item, r) {
     const f = fmt(r.unit, r.value, r.path)
-    const on = chart.open && chart.item && chart.item.id === item.id && chart.key === r.key ? 'active' : ''
+    const on = chart.open && chart.series.some(s => s.id === seriesId(item, r)) ? 'active' : ''
     const level = r.unit === 'ratio' && typeof r.value === 'number' ? `<span class="mon-level"><span style="width:${Math.max(0, Math.min(100, r.value * 100))}%"></span></span>` : ''
     const attrs = r.series ? `data-item="${esc(item.id)}" data-key="${esc(r.key)}" title="${esc(r.label)}: show trend"` : `title="${esc(r.label)}"`
     return `<div class="mon-value ${on} ${r.series ? 'clickable' : ''}" ${attrs}><span>${f.text}<small>${esc(f.unit)}</small></span>${level}</div>`
@@ -145,8 +170,8 @@
     const sub = item.mapped ? (where || groupLabel(g)) : (item.note || `Waiting for ${(p && p.candidates[0]) || 'a Signal K path'}`)
     const live = item.mapped
     const shown = live ? item.readings.filter(r => r.path) : (p ? [p] : [])
-    const active = chart.open && chart.item && chart.item.id === item.id ? 'active' : ''
-    const clickable = p && p.series
+    const active = chart.open && chart.series.some(s => s.item.id === item.id) ? 'active' : ''
+    const clickable = p && trendKey(p)
     return `<div class="circuit mon-row ${shown.length > 1 ? 'multi' : ''} ${live ? '' : 'unmapped'} ${active} ${clickable ? 'clickable' : ''}" style="--cat:${groupVar(g)}" ${clickable ? `data-item="${esc(item.id)}" data-key="${esc(p.key)}"` : ''}>
       <span class="mon-icon">${groupIcon(g)}</span>
       <div class="circuit-name"><strong>${esc(item.name)}</strong><small>${esc(sub)}</small></div>
@@ -185,16 +210,66 @@
   }
 
   // ---- Trend chart
-  const chart = { open: false, item: null, key: null, range: '24h', data: [], unit: '', gapMs: 0, hoverIdx: null, timer: null, seq: 0 }
+  // One chart, up to MAX_SERIES values. The first is the one the trend was
+  // opened from and keeps its group colour; added values take the next free
+  // palette colour and keep it until removed. Each unit has its own scale.
+  const MAX_SERIES = 5
+  // Categorical palette for added values (validated for the dark panel; no red: red reads as an alarm).
+  const OVERLAY_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9']
+  const chart = { open: false, item: null, key: null, series: [], range: '24h', custom: null, customOpen: false, picker: false, mode: prefs.trendMode === 'stacked' ? 'stacked' : 'overlay', start: 0, end: 0, hover: null, timer: null, seq: 0 }
+
+  // CSS colour (var(), hex, …) -> [r, g, b]; canvas and colour distance need numbers.
+  function cssRgb (color) {
+    const probe = document.createElement('span')
+    probe.style.color = color
+    document.querySelector('#monPanel').appendChild(probe)
+    const rgb = (getComputedStyle(probe).color.match(/[\d.]+/g) || [24, 213, 232]).slice(0, 3).map(Number)
+    probe.remove()
+    return rgb
+  }
+  const rgba = (rgb, a) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`
+  // Perceptual distance (OKLab × 100): keeps an added colour off the first one's.
+  function colorDistance (a, b) {
+    const lab = rgb => {
+      const [r, g, bl] = rgb.map(c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4) })
+      const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * bl)
+      const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * bl)
+      const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * bl)
+      return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s]
+    }
+    const x = lab(a); const y = lab(b)
+    return 100 * Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2])
+  }
+
+  const seriesId = (item, r) => `${item.id}|${r.key}`
+  function makeSeries (item, r, rgb) {
+    const probe = convert(r.unit, 0, r.path)
+    return { id: seriesId(item, r), item, r, rgb, unit: probe ? probe.u : '', data: [], gapMs: 0 }
+  }
+  function nextColor () {
+    const used = chart.series.map(s => s.rgb.join())
+    const first = chart.series[0].rgb
+    for (const hex of OVERLAY_COLORS) {
+      const rgb = cssRgb(hex)
+      if (!used.includes(rgb.join()) && colorDistance(rgb, first) >= 15) return rgb
+    }
+    return cssRgb(OVERLAY_COLORS[0])
+  }
+  const seriesName = s => trendable(s.item).length > 1 || s.item.group === 'Circuit current' ? `${s.item.name} · ${s.r.label}` : s.item.name
 
   function openTrend (item, key) {
+    const readings = trendable(item)
+    const r = readings.find(x => x.key === key) || readings[0]
+    if (!r) return
     chart.open = true
     chart.item = item
-    chart.key = key
+    chart.key = r.key
+    chart.picker = false
     const panel = document.querySelector('#monPanel')
     const g = groupOf(item)
     panel.style.setProperty('--cat', groupVar(g))
     panel.classList.add('show')
+    chart.series = [makeSeries(item, r, cssRgb('var(--cat)'))]
     document.querySelector('#monIcon').innerHTML = `<div class="cat-icon">${groupIcon(g)}</div>`
     document.querySelector('#monTitle').textContent = item.name
     render()
@@ -208,42 +283,136 @@
     if (p) p.classList.remove('show')
     render()
   }
+  // The reading buttons (Voltage / Current / …) change the first value only.
+  function setPrimaryReading (key) {
+    const r = trendable(chart.item).find(x => x.key === key)
+    if (!r) return
+    const id = seriesId(chart.item, r)
+    chart.series = chart.series.filter((s, i) => i === 0 || s.id !== id)
+    chart.series[0] = makeSeries(chart.item, r, chart.series[0].rgb)
+    chart.key = r.key
+    render()
+    loadTrend()
+  }
+  function addSeries (itemId, key) {
+    const item = items.find(i => i.id === itemId)
+    const r = item && trendable(item).find(x => x.key === key)
+    if (!r || chart.series.length >= MAX_SERIES || chart.series.some(s => s.id === seriesId(item, r))) return
+    chart.series.push(makeSeries(item, r, nextColor()))
+    chart.picker = false
+    loadTrend()
+  }
+  function removeSeries (id) {
+    const i = chart.series.findIndex(s => s.id === id)
+    if (i <= 0) return
+    chart.series.splice(i, 1)
+    chart.hover = null
+    controls(); legend(); draw()
+  }
+
+  // datetime-local wants local time as YYYY-MM-DDTHH:MM.
+  const toLocalInput = ms => { const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60e3); return d.toISOString().slice(0, 16) }
+  const units = () => [...new Set(chart.series.map(s => s.unit))]
+
+  function controls () {
+    const readings = trendable(chart.item)
+    const first = chart.series[0]
+    document.querySelector('#monSub').textContent = chart.series.length > 1
+      ? `${chart.series.length} values`
+      : `${first.r.path || first.r.candidates[0]}${first.r.sourceModule !== undefined ? ` · from module ${Number(first.r.sourceModule).toString(16).padStart(2, '0').toUpperCase()}` : ''}`
+    const seg = document.querySelector('#monReadings')
+    seg.innerHTML = readings.length > 1 ? readings.map(x => `<button data-key="${esc(x.key)}" class="${x.key === first.r.key ? 'active' : ''}">${esc(x.label)}</button>`).join('') : ''
+    seg.style.display = readings.length > 1 ? '' : 'none'
+    const customOn = chart.customOpen || chart.range === 'custom'
+    document.querySelector('#monRanges').innerHTML = RANGES.map(([k, l]) => `<button data-range="${k}" class="${!customOn && k === chart.range ? 'active' : ''}">${l}</button>`).join('') +
+      `<button data-range="custom" class="${customOn ? 'active' : ''}">Custom</button>`
+    document.querySelector('#monCustom').classList.toggle('show', customOn)
+    const mode = document.querySelector('#monMode')
+    mode.style.display = units().length > 1 ? '' : 'none'
+    mode.innerHTML = [['overlay', 'Overlay'], ['stacked', 'Stacked']].map(([k, l]) => `<button data-mode="${k}" class="${chart.mode === k ? 'active' : ''}">${l}</button>`).join('')
+    const add = document.querySelector('#monAdd')
+    add.disabled = chart.series.length >= MAX_SERIES
+    add.title = add.disabled ? `Up to ${MAX_SERIES} values on one chart` : 'Add another value to this chart'
+    add.classList.toggle('active', chart.picker)
+    document.querySelector('#monPicker').classList.toggle('show', chart.picker)
+    if (chart.picker) pickerList()
+  }
+
+  // Everything that is being trended can be added: meters, senders and circuit currents.
+  function pickerList () {
+    const q = (document.querySelector('#monSearch').value || '').trim().toLowerCase()
+    const have = new Set(chart.series.map(s => s.id))
+    const html = GROUPS.map(g => {
+      const rows = []
+      // Live values first; ones that are off (history only) after them.
+      const isLive = i => i.readings.some(r => r.series)
+      for (const item of items.filter(i => groupOf(i) === g).sort((x, y) => Number(isLive(y)) - Number(isLive(x)) || sortByName(x, y))) {
+        for (const r of trendable(item)) {
+          if (have.has(seriesId(item, r))) continue
+          const c = convert(r.unit, 0, r.path)
+          if (q && !`${item.name} ${r.label} ${groupLabel(g)}`.toLowerCase().includes(q)) continue
+          rows.push(`<button data-add="${esc(item.id)}" data-key="${esc(r.key)}"><span>${esc(item.name)}</span><small>${esc(r.label)}${c && c.u ? ` · ${esc(c.u)}` : ''}${r.series ? '' : ' · not live'}</small></button>`)
+        }
+      }
+      return rows.length ? `<div class="mon-pick-group" style="--cat:${groupVar(g)}"><span class="mon-icon">${groupIcon(g)}</span>${esc(groupLabel(g))}</div>${rows.join('')}` : ''
+    }).join('')
+    document.querySelector('#monPickList').innerHTML = html || '<div class="empty">Nothing else to add.</div>'
+  }
+
+  function applyCustom () {
+    const from = new Date(document.querySelector('#monFrom').value).getTime()
+    const to = new Date(document.querySelector('#monTo').value).getTime()
+    const msg = document.querySelector('#monCustomMsg')
+    if (!Number.isFinite(from) || !Number.isFinite(to)) { msg.textContent = 'Enter a start and an end.'; return }
+    if (to <= from) { msg.textContent = 'The start must be before the end.'; return }
+    msg.textContent = ''
+    chart.range = 'custom'
+    chart.custom = { from, to }
+    loadTrend()
+  }
 
   async function loadTrend () {
-    const item = chart.item
-    const readings = item.readings.filter(r => r.series)
-    const r = readings.find(x => x.key === chart.key) || readings[0]
-    if (!r) return
-    chart.key = r.key
-    document.querySelector('#monSub').textContent = `${r.path}${r.sourceModule !== undefined ? ` · from module ${Number(r.sourceModule).toString(16).padStart(2, '0').toUpperCase()}` : ''}`
-    document.querySelector('#monReadings').innerHTML = readings.length > 1 ? readings.map(x => `<button data-key="${esc(x.key)}" class="${x.key === r.key ? 'active' : ''}">${esc(x.label)}</button>`).join('') : ''
-    document.querySelector('#monReadings').style.display = readings.length > 1 ? '' : 'none'
-    document.querySelector('#monRanges').innerHTML = RANGES.map(([k, l]) => `<button data-range="${k}" class="${k === chart.range ? 'active' : ''}">${l}</button>`).join('')
+    if (!chart.series.length) return
+    controls()
     const seq = ++chart.seq
     setMsg('Loading…')
-    let res
-    try {
-      const resp = await fetch(`${API}/trend?path=${encodeURIComponent(r.series)}&range=${chart.range}`, { cache: 'no-store', credentials: 'include' })
-      res = await resp.json()
-    } catch (e) { res = { available: false, detail: e.message } }
+    const query = chart.range === 'custom' && chart.custom ? `from=${chart.custom.from}&to=${chart.custom.to}` : `range=${chart.range}`
+    const wanted = chart.series.slice()
+    const results = await Promise.all(wanted.map(async s => {
+      try {
+        const resp = await fetch(`${API}/trend?path=${encodeURIComponent(trendKey(s.r))}&${query}`, { cache: 'no-store', credentials: 'include' })
+        return await resp.json()
+      } catch (e) { return { available: false, detail: e.message } }
+    }))
     if (seq !== chart.seq || !chart.open) return
-    const probe = convert(r.unit, 0, r.path)
-    chart.unit = probe ? probe.u : ''
-    // Rows are [t, value] (full detail) or [t, avg, min, max] (summarised).
-    // Kept as [t, value, decimals, min, max]; min/max are null for full detail.
-    chart.data = (res.data || []).map(([t, v, lo, hi]) => {
-      const c = convert(r.unit, v, r.path)
-      if (!c) return null
-      const cl = lo === undefined ? null : convert(r.unit, lo, r.path)
-      const ch = hi === undefined ? null : convert(r.unit, hi, r.path)
-      return [t, c.v, c.d, cl ? Math.min(cl.v, ch.v) : null, ch ? Math.max(cl.v, ch.v) : null]
-    }).filter(Boolean)
-    chart.gapMs = Number(res.gapMs) || 0
-    chart.hoverIdx = null
-    if (!res.available) setMsg(res.detail || 'Trends are not available. Insert an SD card in the GX.')
-    else if (!chart.data.length) setMsg('No samples in this range yet.')
+    wanted.forEach((s, i) => {
+      const res = results[i]
+      // Rows are [t, value] (full detail) or [t, avg, min, max] (summarised).
+      // Kept as [t, value, decimals, min, max]; min/max are null for full detail.
+      s.data = (res.data || []).map(([t, v, lo, hi]) => {
+        const c = convert(s.r.unit, v, s.r.path)
+        if (!c) return null
+        const cl = lo === undefined ? null : convert(s.r.unit, lo, s.r.path)
+        const ch = hi === undefined ? null : convert(s.r.unit, hi, s.r.path)
+        return [t, c.v, c.d, cl ? Math.min(cl.v, ch.v) : null, ch ? Math.max(cl.v, ch.v) : null]
+      }).filter(Boolean)
+      s.gapMs = Number(res.gapMs) || 16 * 60e3
+    })
+    const head = results[0]
+    const now = Date.now()
+    chart.end = Number(head.end) || (chart.custom && chart.range === 'custom' ? chart.custom.to : now)
+    chart.start = Number(head.start) || (chart.custom && chart.range === 'custom' ? chart.custom.from : now - (RANGE_MS[chart.range] || RANGE_MS['24h']))
+    if (!chart.customOpen || chart.range !== 'custom') {
+      document.querySelector('#monFrom').value = toLocalInput(chart.start)
+      document.querySelector('#monTo').value = toLocalInput(chart.end)
+    }
+    chart.hover = null
+    document.querySelector('#monTip').style.display = 'none'
+    if (!head.available) setMsg(head.detail || 'Trends are not available. Insert an SD card in the GX.')
+    else if (chart.series.every(s => !s.data.length)) setMsg(chart.range === 'custom' ? 'Nothing was recorded in this period.' : 'No samples in this range yet.')
     else setMsg('')
-    stats()
+    controls()
+    legend()
     draw()
     clearInterval(chart.timer)
     if (chart.range === '1h' || chart.range === '24h') chart.timer = setInterval(() => { if (chart.open) loadTrend() }, 60000)
@@ -255,18 +424,45 @@
     m.classList.toggle('show', !!text)
   }
 
-  function stats () {
-    const el = document.querySelector('#monStats')
-    const d = chart.data
-    if (!d.length) { el.innerHTML = ''; return }
+  function summarise (s) {
+    const d = s.data
+    if (!d.length) return null
     const vals = d.map(p => p[1])
-    const dp = d[0][2]
-    const f = v => v.toFixed(dp)
-    const u = esc(chart.unit)
-    const tile = (icon, label, v) => `<div class="stat"><div class="stat-icon">${icon}</div><div><strong>${f(v)} <small>${u}</small></strong><span>${label}</span></div></div>`
-    const lows = d.map(p => p[3] === null ? p[1] : p[3])
-    const highs = d.map(p => p[4] === null ? p[1] : p[4])
-    el.innerHTML = tile('●', 'Now', vals[vals.length - 1]) + tile('↓', 'Minimum', Math.min(...lows)) + tile('≈', 'Average', vals.reduce((a, b) => a + b, 0) / vals.length) + tile('↑', 'Maximum', Math.max(...highs))
+    return {
+      dp: d[0][2],
+      now: vals[vals.length - 1],
+      min: Math.min(...d.map(p => p[3] === null ? p[1] : p[3])),
+      avg: vals.reduce((a, b) => a + b, 0) / vals.length,
+      max: Math.max(...d.map(p => p[4] === null ? p[1] : p[4]))
+    }
+  }
+
+  // One value: four tiles. Several: a legend row each, colour swatch beside the
+  // name, numbers in plain ink.
+  function legend () {
+    const tiles = document.querySelector('#monStats')
+    const leg = document.querySelector('#monLegend')
+    const many = chart.series.length > 1
+    tiles.style.display = many ? 'none' : ''
+    leg.classList.toggle('show', many)
+    if (!many) {
+      const s = chart.series[0]
+      const st = summarise(s)
+      if (!st) { tiles.innerHTML = ''; return }
+      const u = esc(s.unit)
+      const tile = (icon, label, v) => `<div class="stat"><div class="stat-icon">${icon}</div><div><strong>${v.toFixed(st.dp)} <small>${u}</small></strong><span>${label}</span></div></div>`
+      tiles.innerHTML = tile('●', 'Now', st.now) + tile('↓', 'Minimum', st.min) + tile('≈', 'Average', st.avg) + tile('↑', 'Maximum', st.max)
+      return
+    }
+    const cell = (st, v, u) => st ? `<b>${v.toFixed(st.dp)}<small> ${esc(u)}</small></b>` : '<b class="none">—</b>'
+    const last = chart.range === 'custom' ? 'Last' : 'Now'
+    leg.innerHTML = `<div class="mon-leg-row head"><span></span><span></span><span>${last}</span><span>Min</span><span class="avg">Avg</span><span>Max</span><span></span></div>` +
+      chart.series.map((s, i) => {
+        const st = summarise(s)
+        return `<div class="mon-leg-row"><i class="mon-swatch" style="background:${rgba(s.rgb, 1)}"></i><span class="mon-leg-name">${esc(seriesName(s))}${st ? '' : '<small> · no data in this period</small>'}</span>` +
+          `${cell(st, st && st.now, s.unit)}${cell(st, st && st.min, s.unit)}<span class="avg">${cell(st, st && st.avg, s.unit)}</span>${cell(st, st && st.max, s.unit)}` +
+          (i ? `<button class="mon-leg-x" data-remove="${esc(s.id)}" aria-label="Remove ${esc(seriesName(s))}" title="Remove">✕</button>` : '<span></span>') + '</div>'
+      }).join('')
   }
 
   function niceTicks (min, max, count = 5) {
@@ -280,30 +476,40 @@
     for (let v = lo; v <= hi + step / 2; v += step) ticks.push(Math.round(v / step) * step)
     return { lo, hi, ticks, step }
   }
-
-  function timeLabel (t, range) {
-    const d = new Date(t)
-    const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    if (range === '1h' || range === '24h') return hm
-    if (range === '7d') return d.toLocaleDateString([], { weekday: 'short' }) + ' ' + hm
-    if (range === '1y') return d.toLocaleDateString([], { month: 'short', year: '2-digit' })
-    return d.toLocaleDateString([], { day: 'numeric', month: 'short' })
+  // A scale with exactly n intervals, so every unit's ticks sit on the same grid lines.
+  function alignedTicks (min, max, n) {
+    if (min === max) { const pad = Math.abs(min) * 0.05 || 1; min -= pad; max += pad }
+    const raw = (max - min) / n
+    for (let mag = Math.pow(10, Math.floor(Math.log10(raw))); ; mag *= 10) {
+      for (const m of [1, 2, 2.5, 5, 10]) {
+        const step = m * mag
+        if (step < raw * 0.999) continue
+        const lo = Math.floor(min / step + 1e-9) * step
+        if (lo + n * step >= max - step * 1e-6) return { lo, hi: lo + n * step, step, ticks: Array.from({ length: n + 1 }, (_, i) => lo + i * step) }
+      }
+    }
   }
 
-  // Canvas needs a concrete colour: resolve any CSS colour (var(), hex) to rgba.
-  function withAlpha (color, a) {
-    const probe = document.createElement('span')
-    probe.style.color = color
-    document.body.appendChild(probe)
-    const rgb = getComputedStyle(probe).color.match(/[\d.]+/g) || [24, 213, 232]
-    probe.remove()
-    return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`
+  function timeLabel (t, span) {
+    const d = new Date(t)
+    const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    if (span <= 36 * 3600e3) return hm
+    if (span <= 10 * 86400e3) return d.toLocaleDateString([], { weekday: 'short' }) + ' ' + hm
+    if (span <= 200 * 86400e3) return d.toLocaleDateString([], { day: 'numeric', month: 'short' })
+    return d.toLocaleDateString([], { month: 'short', year: '2-digit' })
   }
 
   let geom = null
   function draw () {
     const canvas = document.querySelector('#monCanvas')
     if (!canvas) return
+    geom = null
+    const withData = chart.series.filter(s => s.data.length)
+    // One scale per unit, in the order the units were added.
+    const axes = units().map(unit => ({ unit, series: withData.filter(s => s.unit === unit) })).filter(a => a.series.length)
+    const stacked = chart.mode === 'stacked' && axes.length > 1
+    const panes = stacked ? axes.map(a => [a]) : [axes]
+    canvas.style.height = stacked ? `${panes.length * 180 + 40}px` : ''
     const dpr = window.devicePixelRatio || 1
     const W = canvas.clientWidth
     const H = canvas.clientHeight
@@ -312,127 +518,190 @@
     const ctx = canvas.getContext('2d')
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, W, H)
-    const d = chart.data
-    geom = null
-    if (!d.length) return
+    if (!axes.length) return
 
     const css = getComputedStyle(document.documentElement)
     const ink = css.getPropertyValue('--muted').trim() || '#8fa7be'
-    const panelCss = getComputedStyle(document.querySelector('#monPanel'))
-    const lineColor = panelCss.getPropertyValue('--mon-line').trim() || css.getPropertyValue('--cyan').trim() || '#18d5e8'
-    const y = niceTicks(Math.min(...d.map(p => p[3] === null ? p[1] : p[3])), Math.max(...d.map(p => p[4] === null ? p[1] : p[4])))
-    const dp = Math.max(0, -Math.floor(Math.log10(y.step)))
+    const single = chart.series.length === 1
     ctx.font = '11px Inter, system-ui, sans-serif'
-    const labelW = Math.max(...y.ticks.map(t => ctx.measureText(t.toFixed(dp)).width)) + 12
-    const pad = { l: labelW, r: 12, t: 12, b: 26 }
-    const pw = W - pad.l - pad.r
-    const ph = H - pad.t - pad.b
-    const now = Date.now()
-    const span = RANGE_MS[chart.range] || RANGE_MS['24h']
-    const t0 = Math.min(d[0][0], now - span)
-    const t1 = now
-    const X = t => pad.l + ((t - t0) / (t1 - t0)) * pw
-    const Y = v => pad.t + (1 - (v - y.lo) / (y.hi - y.lo)) * ph
 
-    // Grid + y labels (recessive)
-    ctx.strokeStyle = 'rgba(148,193,235,.10)'
-    ctx.lineWidth = 1
-    ctx.fillStyle = ink
-    ctx.textAlign = 'right'
-    ctx.textBaseline = 'middle'
-    for (const t of y.ticks) {
-      const yy = Math.round(Y(t)) + 0.5
-      ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(W - pad.r, yy); ctx.stroke()
-      ctx.fillText(t.toFixed(dp), pad.l - 8, yy)
+    // Scales. In one plot every unit gets the same number of intervals.
+    for (const pane of panes) {
+      pane.forEach((a, i) => {
+        // A lone value shows its min–max band, so the scale must cover it.
+        const lows = a.series.flatMap(s => s.data.map(p => single && p[3] !== null ? p[3] : p[1]))
+        const highs = a.series.flatMap(s => s.data.map(p => single && p[4] !== null ? p[4] : p[1]))
+        const lo = Math.min(...lows); const hi = Math.max(...highs)
+        a.y = i === 0 ? niceTicks(lo, hi, stacked ? 3 : 5) : alignedTicks(lo, hi, pane[0].y.ticks.length - 1)
+        a.dp = Math.max(0, -Math.floor(Math.log10(a.y.step) + 1e-9))
+        if (a.y.ticks.some(t => Math.abs(t * Math.pow(10, a.dp) - Math.round(t * Math.pow(10, a.dp))) > 1e-6)) a.dp++
+        a.w = Math.max(...a.y.ticks.map(t => ctx.measureText(t.toFixed(a.dp)).width), ctx.measureText(a.unit).width + a.series.length * 9) + 14
+      })
+    }
+    const headed = axes.length > 1 // unit names above the axes
+    const pad = { l: Math.max(...panes.map(p => p[0].w)), r: Math.max(12, ...panes.map(p => p.slice(1).reduce((n, a) => n + a.w, 0))), t: headed ? 24 : 12, b: 26 }
+    const pw = W - pad.l - pad.r
+    const gap = stacked ? 36 : 0
+    const ph = (H - pad.t - pad.b - gap * (panes.length - 1)) / panes.length
+    const t0 = chart.start
+    const t1 = chart.end
+    const X = t => pad.l + ((t - t0) / (t1 - t0)) * pw
+    panes.forEach((pane, i) => {
+      const top = pad.t + i * (ph + gap)
+      pane.top = top
+      pane.forEach(a => { a.Y = v => top + (1 - (v - a.y.lo) / (a.y.hi - a.y.lo)) * ph })
+    })
+
+    for (const pane of panes) {
+      // Grid + y labels (recessive)
+      ctx.strokeStyle = 'rgba(148,193,235,.10)'
+      ctx.lineWidth = 1
+      ctx.textBaseline = 'middle'
+      let right = W - pad.r
+      pane.forEach((a, i) => {
+        ctx.fillStyle = ink
+        ctx.textAlign = i === 0 ? 'right' : 'left'
+        const lx = i === 0 ? pad.l - 8 : right + 8
+        for (const t of a.y.ticks) {
+          const yy = Math.round(a.Y(t)) + 0.5
+          if (i === 0) { ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(W - pad.r, yy); ctx.stroke() }
+          ctx.fillText(t.toFixed(a.dp), lx, yy)
+        }
+        if (headed) {
+          // Unit name above its axis, with a dot per value that uses it.
+          const hy = pane.top - 13
+          const uw = ctx.measureText(a.unit).width
+          let x = i === 0 ? pad.l - 8 - uw - a.series.length * 9 : right + 8
+          for (const s of a.series) { ctx.fillStyle = rgba(s.rgb, 1); ctx.beginPath(); ctx.arc(x + 3, hy, 3, 0, Math.PI * 2); ctx.fill(); x += 9 }
+          ctx.fillStyle = ink
+          ctx.textAlign = 'left'
+          ctx.fillText(a.unit, x, hy)
+        }
+        if (i > 0) right += a.w
+      })
     }
     // X labels
-    ctx.textAlign = 'center'
+    ctx.fillStyle = ink
     ctx.textBaseline = 'top'
     const n = Math.max(2, Math.min(7, Math.floor(pw / 110)))
     for (let i = 0; i <= n; i++) {
       const t = t0 + (i / n) * (t1 - t0)
-      const x = X(t)
       ctx.textAlign = i === 0 ? 'left' : i === n ? 'right' : 'center'
-      ctx.fillText(timeLabel(t, chart.range), x, H - pad.b + 8)
+      ctx.fillText(timeLabel(t, t1 - t0), X(t), H - pad.b + 8)
     }
 
-    // Break the line where samples are missing (plugin stopped, card out).
-    // The server says how far apart rows can be before data is missing
-    // (unchanged values are only stored every 10 minutes).
-    const breakAt = chart.gapMs || 16 * 60e3
-    const segments = []
-    let seg = [d[0]]
-    for (let i = 1; i < d.length; i++) {
-      if (d[i][0] - d[i - 1][0] > breakAt) { segments.push(seg); seg = [] }
-      seg.push(d[i])
-    }
-    segments.push(seg)
-
-    const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ph)
-    grad.addColorStop(0, withAlpha(lineColor, 0.22))
-    grad.addColorStop(1, withAlpha(lineColor, 0))
-    const band = withAlpha(lineColor, 0.20)
-    for (const s of segments) {
-      // Min-max band behind the average line (summarised data only).
-      const banded = s.length > 1 && s.some(p => p[3] !== null && p[4] !== p[3])
-      if (banded) {
-        ctx.beginPath()
-        s.forEach((p, i) => { const v = p[4] === null ? p[1] : p[4]; i ? ctx.lineTo(X(p[0]), Y(v)) : ctx.moveTo(X(p[0]), Y(v)) })
-        for (let i = s.length - 1; i >= 0; i--) ctx.lineTo(X(s[i][0]), Y(s[i][3] === null ? s[i][1] : s[i][3]))
-        ctx.closePath()
-        ctx.fillStyle = band
-        ctx.fill()
+    ctx.save()
+    ctx.beginPath(); ctx.rect(pad.l, 0, pw, H); ctx.clip()
+    for (const pane of panes) {
+      const base = pane.top + ph
+      // The first value is drawn last, on top.
+      const drawn = pane.flatMap(a => a.series.map(s => ({ s, Y: a.Y }))).reverse()
+      for (const { s, Y } of drawn) {
+        const d = s.data
+        const color = rgba(s.rgb, 1)
+        // Break the line where samples are missing (plugin stopped, card out).
+        const segments = []
+        let seg = [d[0]]
+        for (let i = 1; i < d.length; i++) {
+          if (d[i][0] - d[i - 1][0] > s.gapMs) { segments.push(seg); seg = [] }
+          seg.push(d[i])
+        }
+        segments.push(seg)
+        for (const g of segments) {
+          if (g.length === 1) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(X(g[0][0]), Y(g[0][1]), 2.5, 0, Math.PI * 2); ctx.fill(); continue }
+          if (single) {
+            // Min–max band behind the average (summarised data), else a soft fill.
+            const banded = g.some(p => p[3] !== null && p[4] !== p[3])
+            ctx.beginPath()
+            if (banded) {
+              g.forEach((p, i) => { const v = p[4] === null ? p[1] : p[4]; i ? ctx.lineTo(X(p[0]), Y(v)) : ctx.moveTo(X(p[0]), Y(v)) })
+              for (let i = g.length - 1; i >= 0; i--) ctx.lineTo(X(g[i][0]), Y(g[i][3] === null ? g[i][1] : g[i][3]))
+              ctx.fillStyle = rgba(s.rgb, 0.20)
+            } else {
+              g.forEach((p, i) => i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))
+              ctx.lineTo(X(g[g.length - 1][0]), base)
+              ctx.lineTo(X(g[0][0]), base)
+              const grad = ctx.createLinearGradient(0, pane.top, 0, base)
+              grad.addColorStop(0, rgba(s.rgb, 0.22))
+              grad.addColorStop(1, rgba(s.rgb, 0))
+              ctx.fillStyle = grad
+            }
+            ctx.closePath()
+            ctx.fill()
+          }
+          ctx.beginPath()
+          g.forEach((p, i) => i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))
+          ctx.strokeStyle = color
+          ctx.lineWidth = 2
+          ctx.lineJoin = 'round'
+          ctx.stroke()
+        }
       }
-      if (s.length === 1) { ctx.fillStyle = lineColor; ctx.beginPath(); ctx.arc(X(s[0][0]), Y(s[0][1]), 2.5, 0, Math.PI * 2); ctx.fill(); continue }
-      if (!banded) {
-        ctx.beginPath()
-        s.forEach((p, i) => i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))
-        ctx.lineTo(X(s[s.length - 1][0]), pad.t + ph)
-        ctx.lineTo(X(s[0][0]), pad.t + ph)
-        ctx.closePath()
-        ctx.fillStyle = grad
-        ctx.fill()
-      }
-      ctx.beginPath()
-      s.forEach((p, i) => i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))
-      ctx.strokeStyle = lineColor
-      ctx.lineWidth = 2
-      ctx.lineJoin = 'round'
-      ctx.stroke()
     }
+    ctx.restore()
 
-    geom = { X, Y, pad, ph, W }
-    if (chart.hoverIdx !== null && d[chart.hoverIdx]) {
-      const p = d[chart.hoverIdx]
-      const x = X(p[0])
+    geom = { X, pad, pw, W, H, t0, t1, top: pad.t, bottom: H - pad.b }
+    if (chart.hover) {
+      const x = Math.round(X(chart.hover.t)) + 0.5
       ctx.strokeStyle = 'rgba(237,246,255,.35)'
       ctx.lineWidth = 1
-      ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, pad.t); ctx.lineTo(Math.round(x) + 0.5, pad.t + ph); ctx.stroke()
-      ctx.fillStyle = lineColor
-      ctx.strokeStyle = css.getPropertyValue('--panel').trim() || '#0b1a2b'
-      ctx.lineWidth = 2
-      ctx.beginPath(); ctx.arc(x, Y(p[1]), 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+      for (const pane of panes) { ctx.beginPath(); ctx.moveTo(x, pane.top); ctx.lineTo(x, pane.top + ph); ctx.stroke() }
+      const ring = css.getPropertyValue('--panel').trim() || '#0b1a2b'
+      for (const pane of panes) {
+        for (const a of pane) {
+          for (const s of a.series) {
+            const p = chart.hover.points.get(s.id)
+            if (!p) continue
+            ctx.fillStyle = rgba(s.rgb, 1)
+            ctx.strokeStyle = ring
+            ctx.lineWidth = 2
+            ctx.beginPath(); ctx.arc(X(p[0]), a.Y(p[1]), 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+            if (s === chart.series[0]) geom.firstY = a.Y(p[1])
+          }
+        }
+      }
     }
   }
 
+  function nearest (d, t) {
+    let lo = 0; let hi = d.length - 1
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (d[mid][0] < t) lo = mid; else hi = mid }
+    return Math.abs(d[lo][0] - t) <= Math.abs(d[hi][0] - t) ? d[lo] : d[hi]
+  }
+
+  // The crosshair snaps to the nearest sample of any value; each value then
+  // reports its own sample at that time (or nothing, inside a gap).
   function hover (px) {
     const tip = document.querySelector('#monTip')
-    if (!geom || !chart.data.length) { tip.style.display = 'none'; return }
-    let best = 0
-    let bestDx = Infinity
-    chart.data.forEach((p, i) => { const dx = Math.abs(geom.X(p[0]) - px); if (dx < bestDx) { bestDx = dx; best = i } })
-    chart.hoverIdx = best
+    const live = chart.series.filter(s => s.data.length)
+    if (!geom || !live.length) { tip.style.display = 'none'; return }
+    const t = geom.t0 + ((px - geom.pad.l) / geom.pw) * (geom.t1 - geom.t0)
+    const snap = live.map(s => nearest(s.data, t)).reduce((a, b) => Math.abs(a[0] - t) <= Math.abs(b[0] - t) ? a : b)
+    const points = new Map()
+    for (const s of live) {
+      const p = nearest(s.data, snap[0])
+      if (Math.abs(p[0] - snap[0]) <= s.gapMs) points.set(s.id, p)
+    }
+    chart.hover = { t: snap[0], points }
     draw()
-    const p = chart.data[best]
-    const x = geom.X(p[0])
-    const when = new Date(p[0]).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-    const spread = p[3] !== null && p[4] !== p[3] ? `<small>min ${p[3].toFixed(p[2])} · max ${p[4].toFixed(p[2])}</small>` : ''
-    tip.innerHTML = `<b>${p[1].toFixed(p[2])} ${esc(chart.unit)}</b>${spread}<small>${esc(when)}</small>`
+    const x = geom.X(snap[0])
+    const span = geom.t1 - geom.t0
+    const when = new Date(snap[0]).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', ...(span > 300 * 86400e3 ? { year: 'numeric' } : {}), hour: '2-digit', minute: '2-digit' })
+    if (chart.series.length === 1) {
+      const p = snap
+      const spread = p[3] !== null && p[4] !== p[3] ? `<small>min ${p[3].toFixed(p[2])} · max ${p[4].toFixed(p[2])}</small>` : ''
+      tip.innerHTML = `<b>${p[1].toFixed(p[2])} ${esc(chart.series[0].unit)}</b>${spread}<small>${esc(when)}</small>`
+    } else {
+      tip.innerHTML = `<small>${esc(when)}</small>` + chart.series.map(s => {
+        const p = points.get(s.id)
+        return `<div class="mon-tip-row"><i class="mon-swatch" style="background:${rgba(s.rgb, 1)}"></i><span>${esc(seriesName(s))}</span><b>${p ? `${p[1].toFixed(p[2])} ${esc(s.unit)}` : '—'}</b></div>`
+      }).join('')
+    }
     tip.style.display = 'block'
     const tw = tip.offsetWidth
     const left = x + 14 + tw > geom.W - 8 ? x - 14 - tw : x + 14
     tip.style.left = `${Math.max(8, left) + 12}px`
-    tip.style.top = `${Math.max(12, geom.Y(p[1]) - 20)}px`
+    tip.style.top = `${chart.series.length === 1 && geom.firstY !== undefined ? Math.max(12, geom.firstY - 20) : geom.top + 14}px`
   }
 
   // ---- Public hooks for the host page
