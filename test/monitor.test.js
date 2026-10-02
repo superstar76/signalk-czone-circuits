@@ -323,7 +323,7 @@ function writeFebruary (folder, value) {
   monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
   const call = (p, query = {}) => { let out; routes[p]({ query }, { json: v => { out = v }, status: () => ({ json: v => { out = v } }) }); return out }
   const items = call('/monitor/items')
-  assert.strictEqual(items.total, 47)
+  assert.strictEqual(items.total, 40) // 7 virtual-switch circuits carry no current
   assert.strictEqual(items.mapped, 2)
   assert.deepStrictEqual(call('/monitor/values').values, { 'electrical.batteries.0.voltage': 13.2, 'tanks.fuel.0.currentLevel': 0.42 })
   const trend = call('/trend', { path: 'tanks.fuel.0.currentLevel', range: '1h' })

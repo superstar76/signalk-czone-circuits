@@ -80,6 +80,10 @@ var signalk_czone_circuits = (function () {
       persist({ victronSwitchCurrent: value })
     }
 
+    function setShowVirtualCircuits (value) {
+      persist({ showVirtualCircuits: value })
+    }
+
     function setTrendDirectory (value) {
       persist({ trendDirectory: String(value || '').trim() })
     }
@@ -237,6 +241,14 @@ var signalk_czone_circuits = (function () {
           ' Allow this plugin to send NMEA 2000 messages'
         ),
         React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'When enabled, the plugin can send CZone circuit and Mode control PGNs to your NMEA 2000 network.')
+      ),
+
+      React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
+        React.createElement('label', null,
+          React.createElement('input', { type: 'checkbox', checked: configuration.showVirtualCircuits === true, disabled: busy, onChange: function (e) { setShowVirtualCircuits(e.target.checked) } }),
+          ' Show virtual switch circuits'
+        ),
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Circuits that only drive CZone virtual switches (VS 01, VS 02, …) are hidden from the webapp and the Victron switch pane unless this is ticked.')
       ),
 
       React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },

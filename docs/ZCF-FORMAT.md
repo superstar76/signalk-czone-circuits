@@ -146,3 +146,20 @@ meter in all eight fixture files resolves through these tables.
 | Meitaki, Persevere, Sel Citron, SugarShack | 7 / 8 / 8 / 13 | 50 / 5 / 34 / 26 | exact table walks, incl. tank and current-sender calibration curves |
 
 Run `node test/zcf-monitor.test.js`.
+
+## DC meter type (settings record byte 28)
+
+Low nibble = NMEA 2000 DC type (0 battery, 1 alternator, 2 converter, 3 solar cell, 4 wind generator); high nibble = nominal voltage (1 = 12 V, 2 = 24 V). `0x10` 12 V battery, `0x20` 24 V battery, `0x11` alternator, `0x12` converter, `0x13` solar. Checked by meter name in all seven sample files.
+
+## Circuit sub-categories
+
+Flags u32 at circuit record + 10, bits 16..31: House/Habitat, Vessel Critical, Navigation, Electronics, 24-Hour Circuits, Communications, Accessories, Indicators and Alarms, Engine Management, Fans/Ventilation, Lighting, Vessel Management, Pumps, Propulsion Management, Power, Refrigeration. Category word u16 at record + 14: bit 0 Entertainment, 1 Climate, 2 Appliances, 3 Other, 4 Favourites, 5 DC, 6 AC, 7..11 User Definable Circuit Display Category 1..5. "Bilge Pumps" not located.
+
+## User-defined category names
+
+```
+u8 nameLength @14 | vessel name | modules table | backlight-zone table | block
+table: u32 length | u16 count | u8 header | records
+block: u8 length | 5 x (u8 n | name) | u8
+```
+Meitaki: Winches, Furlers, Lithium. Sel Citron: Telecommunications. Empty strings where unused.

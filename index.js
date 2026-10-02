@@ -7,7 +7,7 @@ const czone = require('./lib/czone')
 const nmea = require('./lib/nmea2000')
 const signalk = require('./lib/signalk')
 const { createMonitor } = require('./lib/monitor')
-const { applyStatusFallback } = require('./lib/status-fallback')
+const { prepareMapping } = require('./lib/fork-mapping')
 
 const MAX_UPLOAD_BYTES = 1024 * 1024
 const CZONE_CONFIG_BLOCK_HEADER = 23
@@ -161,10 +161,15 @@ module.exports = function (app) {
       return null
     }
     mapping = zcf.load(zcfPath())
-    // [fork, interim] ZCF without a status table: state bit = output channel.
+    // [fork] virtual-switch circuits hidden, every sub-category named
+    // (including the five user-defined ones), and state inferred from
+    // module/channel when the ZCF has no status table.
     {
-      const inferred = applyStatusFallback(mapping)
-      if (inferred) log(`No status table in the ZCF: circuit state inferred from module/channel for ${inferred} circuits`)
+      const r = prepareMapping(mapping, settings)
+      const userNames = r.userCategories.filter(Boolean)
+      if (userNames.length) log(`User-defined circuit categories: ${userNames.join(', ')}`)
+      if (r.virtualHidden) log(`${r.virtualHidden} virtual-switch circuits hidden`)
+      if (r.inferredState) log(`No status table in the ZCF: circuit state inferred from module/channel for ${r.inferredState} circuits`)
     }
     mapping.commandDeviceId = selectCommandDeviceId(mapping)
     publishedCircuitValues.clear()
@@ -969,6 +974,12 @@ module.exports = function (app) {
           enumNames: ['As long as there is space', '31 days', '90 days', '1 year'],
           default: 0,
           description: 'Ten-minute summaries are always kept. When storage runs low, the oldest full-detail days are removed first, then the oldest summaries.'
+        },
+        showVirtualCircuits: {
+          type: 'boolean',
+          title: 'Show virtual switch circuits',
+          default: false,
+          description: 'Circuits that only drive CZone virtual switches (VS 01, VS 02, …) are hidden from the webapp and the Victron switch pane unless this is ticked.'
         },
         victronSwitches: {
           type: 'boolean',

@@ -5,7 +5,15 @@ const assert = require('assert')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { createVictronSwitches } = require('../lib/victron/switches')
+const { createVictronSwitches, groupFor } = require('../lib/victron/switches')
+
+// One card per circuit: its sub-category; with several, a fixed priority; with
+// none, DC / AC.
+assert.strictEqual(groupFor({ masterCategory: 'DC', subCategories: ['Refrigeration'] }), 'Refrigeration')
+assert.strictEqual(groupFor({ masterCategory: 'DC', subCategories: ['Lighting', 'Navigation'] }), 'Navigation')
+assert.strictEqual(groupFor({ masterCategory: 'DC', subCategories: ['Entertainment', 'Lighting'] }), 'Lighting')
+assert.strictEqual(groupFor({ masterCategory: 'DC', subCategories: ['Something New'] }), 'Something New')
+assert.strictEqual(groupFor({ masterCategory: 'AC', subCategories: [] }), 'AC')
 
 const objects = {}
 const signals = []
@@ -29,7 +37,7 @@ let hostControls = null
 const calls = []
 const sw = createVictronSwitches(app, { controls: () => hostControls, getCurrent: p => (p === 'electrical.czone.Light_2.current' ? 1.5 : null), version: 'test' })
 
-sw.start({ victronSwitches: true }, zcf, { bus }).then(status => {
+sw.start({ victronSwitches: true }, zcf, { bus }).then(async status => {
   assert.strictEqual(status.running, true)
   assert.strictEqual(status.channels, 6)
   const get = p => objects[p].GetValue()
@@ -95,6 +103,19 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(status => {
   sw._resync()
   Date.now = realNow
   assert.deepStrictEqual(get('/SwitchableOutput/Light_3/State'), ['i', 0])
+  // States are repeated to the GX even when nothing changed, so a listener
+  // holding a stale value (snapshot taken while the service was starting) recovers.
+  await new Promise(resolve => setTimeout(resolve, 80)) // let earlier changes flush
+  const before = signals.length
+  sw._announce()
+  await new Promise(resolve => setTimeout(resolve, 80))
+  const repeated = signals.slice(before)
+  assert.strictEqual(repeated.length, 1)
+  assert.deepStrictEqual([repeated[0].p, repeated[0].member], ['/', 'ItemsChanged'])
+  const sent = Object.fromEntries(repeated[0].body[0].map(([p, kv]) => [p, kv[0][1][1]]))
+  assert.strictEqual(sent['/SwitchableOutput/Light_5/State'], 1)
+  assert.strictEqual(sent['/SwitchableOutput/Light_4/State'], 0)
+  assert('/SwitchableOutput/Light_1/Settings/CustomName' in sent)
   sw.stop()
   console.log('Victron switch pane tests passed')
 }).catch(err => { console.error(err); process.exit(1) })

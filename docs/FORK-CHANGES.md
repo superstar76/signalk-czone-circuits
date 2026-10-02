@@ -36,6 +36,20 @@ A **Monitoring** entry in the webapp sidebar lists everything the CZone configur
 - **Trend:** the › arrow beside ON/OFF opens that circuit's current trend.
 - **Off = 0 A:** an output whose level word says OFF reads 0 A (the Output Interface otherwise reports a constant 0.1 A).
 
+## 2a. What the fork adjusts on the parser's result (`lib/fork-mapping.js`)
+
+One step after `zcf.load()`, shared by the webapp, the Signal K paths and the Victron switch pane:
+
+- **State without a status table** (Compass Rose, Persevere): bit n of PGN 65284 = output channel n.
+- **Every sub-category named** (20 standard ones) and the five user-defined ones read from the ZCF by name (Meitaki: Winches, Furlers, Lithium). `circuit.subCategories` lists all that are ticked, most specific first; `circuit.group` is the first of them, used where a circuit can be in one group only (Victron switch pane). Order: `GROUP_PRIORITY` in `lib/fork-mapping.js`.
+- **Virtual-switch circuits hidden** (all outputs on channel 32 or above), unless the setting is ticked.
+
+## 2b. AC and third-party readings
+
+- **AC:** the older PGNs 127503 / 127504 are decoded as well as 127744 / 127747. All feed the same AC meter readings, so a meter shows once; when both styles are on the bus the older pair is used.
+- **DC meters matched by type:** each DC meter's type (battery, alternator, converter, solar) is read from the ZCF. When several devices send a third-party meter's instance, the one whose PGN 127506 declares that type is used; for a battery, the one that reports state of charge. Compass Rose: House Battery from the BMS (of five devices on instance 0), Solar from the MPPT's array side (of three on instance 1). `/monitor/bus` lists `dcMeters` (wanted type, every sender, the one chosen). Solar, alternator and converter meters show voltage and current only.
+- **One sender per reading:** a third-party reading stays with the device that is sending it and does not flip between two devices that use the same instance. `/monitor/bus` lists `sensorOwners` and `contested`.
+
 ## 3. Trending
 
 - **Sampling:** every 10 s by default (setting: 5 / 10 / 15 / 30 / 60 s), buffered, written once a minute.
@@ -92,10 +106,11 @@ A **Monitoring** entry in the webapp sidebar lists everything the CZone configur
 | Show CZone circuits in the Victron switch pane | off |
 | Show circuit current in the switch label | on |
 | Trend folder (optional) | automatic |
+| Show virtual switch circuits | off |
 | Trend sample rate | 10 seconds |
 | Keep full-detail trend data for | as long as there is space |
 
-All five are in both `schema` and the custom config panel (`public/remoteEntry.js`).
+All six are in both `schema` and the custom config panel (`public/remoteEntry.js`).
 
 ## 8. Diagnostics routes
 
@@ -114,12 +129,16 @@ lib/monitor/storage.js    trend storage: two tiers, write-on-change, space guard
 lib/monitor/wire.js       candump listener for third-party sensors
 lib/victron/vedbus.js     minimal Victron VeDbus service on dbus-native
 lib/victron/switches.js   CZone circuits as Venus OS switchable outputs
+lib/fork-mapping.js       state fallback, categories and groups, virtual-switch circuits
+lib/monitor/fastpacket.js fast-packet reassembly (current tables, older AC PGNs)
 lib/zcf-circuits.js       structural circuit parser (see §6)
 lib/zcf-monitor.js        meters, meter settings, inputs
 public/monitor.js         Monitoring tab + trend panel
 public/monitor.css
 test/monitor.test.js, test/victron-switches.test.js,
-test/zcf-circuits.test.js, test/zcf-monitor.test.js
+test/zcf-circuits.test.js, test/zcf-monitor.test.js,
+test/fork-mapping.test.js, test/control-x-plus.test.js,
+test/ac-legacy.test.js, test/dc-meters.test.js
 test/fixtures/TestBench-2026-10-01.zcf
 docs/ZCF-FORMAT.md
 ```

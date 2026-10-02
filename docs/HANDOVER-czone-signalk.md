@@ -94,6 +94,7 @@ Output table details:
 | 127505 | Tank level: instance + fluid type nibble |
 | 127508 / 127506 | Battery V / A / temp, SoC (first fast-packet frame) |
 | 127744 / 127747 | AC phase A current/power, voltage/frequency; "connection" = AC meter instance |
+| 127503 / 127504 | Older AC input / output status (fast packet): instance, V 0.01, A 0.1, Hz 0.01, W. Preferred over 127744/7 when both are present. On Compass Rose a Node-RED flow bridges the Victron inverter to these for CZone and the Simrad MFD |
 
 ---
 
@@ -203,7 +204,9 @@ Plain CSV files, no database. Nothing is built or held without storage: with no 
 - Two Control X PLUS modules (dipswitch 01 on N2K address 0, 02 on address 2), a keypad (dipswitch 04, address 3), a Simrad MFD (address 5). **No CZone display.**
 - The February plugin (`signalk-czone-switch-control`) is removed; backups of it, the Signal K settings and the trend data are on Matthew's laptop. Its leftovers were what blocked Signal K app updates.
 - Its trend history (30 s files under Venus/VRM instance paths) is read in place through `aliases.json` in the trend folder.
-- **No ZCF status table** on this configuration: circuit state is inferred (bit = output channel) by `lib/status-fallback.js` until Matt's parser handles it.
+- **No ZCF status table** on this configuration: circuit state is inferred (bit = output channel) by `lib/fork-mapping.js` until Matt's parser handles it. The same file names every circuit sub-category (and reads the five user-defined names from the ZCF), sets one group per circuit for the switch pane, and hides virtual-switch circuits (outputs all on channel 32+).
+- **Battery messages on this bus (3 Oct 2026):** instance 0 from five devices: 227 BMS (13.57 V, 31 A, SoC 84 %, 18 °C), 224 shunt (13.54 V, 30 A; its aux input is instance 1, 12.6 V), 225 inverter/charger (13.66 V, −1.7 A, no 127506), 36 MPPT battery side (13.8 V, 38 A), 46 DC-DC converter (13.5 V, 0 A). Instance 1 also from 46 (12.6 V, 0 A, type converter) and from 36 (**81 V, 6.5 A, type solar cell**: the array). 228 repeats the BMS as instance 239. The ZCF says House Battery = instance 0, battery; Solar = instance 1, solar. The monitor picks 227 and 36 by matching the ZCF's DC type to the type each device declares in PGN 127506 (battery: the one with state of charge).
+- **AC:** Signal K (address 101) sends 127504 instance 0 (inverter output) and 127503 instance 1 (AC input), bridged from the Victron inverter by a Node-RED flow.
 - **Circuit current** comes from PGN 130825 (above).
 - Fast update when only the plugin's own files change (no npm): unpack the GitHub tarball over `node_modules/signalk-czone-circuits`, `chown`, restart.
 - Open: the Cerbo is heavily loaded (load average ~3.4 on two cores); two N2K devices both send battery instance 0; AC meters and the fridge sensor are not on the bus.
