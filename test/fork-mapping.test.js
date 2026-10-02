@@ -110,6 +110,16 @@ function run (fixture) {
   assert.deepStrictEqual([cr.VHF.group, cr['Nav Lights'].group, cr.Stereo.group, cr.Fridge.group, cr['Fresh Water Pump'].group], ['Communications', 'Navigation', 'Entertainment', 'Refrigeration', 'Pumps'])
   assert.strictEqual(cr['AFT Outlets'].group, 'DC') // nothing ticked: stays under its master category
 
+  // Compass Rose 03.10.26, categories tidied up in the Configuration Tool: the
+  // two bilge pumps are ticked Bilge Pumps only (category word bit 13).
+  const cr2 = load('Compass-Rose-03.10.26.zcf').by
+  assert.deepStrictEqual(cr2['E/R Bilge Pump'].subCategories, ['Bilge Pumps'])
+  assert.strictEqual(cr2['FWD Bilge Pump'].group, 'Bilge Pumps')
+  assert.strictEqual(cr2['E/R Bilge Pump Running'].group, 'Indicators and Alarms')
+  assert.deepStrictEqual([cr2['Fresh Water Pump'].group, cr2['Engine Room Lights'].group, cr2.Instruments.group, cr2.Autopilot.group], ['Pumps', 'Lighting', 'Vessel Management', 'Vessel Management'])
+  assert.strictEqual(Object.values(cr2).filter(c => c.group === 'DC' || c.group === 'AC').length, 0) // nothing left uncategorised
+  assert.strictEqual(primaryCategory(['Pumps', 'Bilge Pumps']), 'Bilge Pumps')
+
   // Meitaki: the owner's own categories come first.
   const mei = load('Meitaki-07.04.25.zcf')
   assert.deepStrictEqual(mei.report.userCategories, ['Winches', 'Furlers', 'Lithium', '', ''])
@@ -134,10 +144,11 @@ function run (fixture) {
     for (const c of m.circuits) {
       const bits = c.zcf.category.subCategoryBits >>> 0
       const word = c.zcf.category.categoryWord
-      const ticked = bits.toString(2).split('1').length - 1 + (word & 0x0f).toString(2).split('1').length - 1 + ((word >> 7) & 0x1f).toString(2).split('1').length - 1
+      const ones = n => n.toString(2).split('1').length - 1
+      const ticked = ones(bits) + ones(word & 0x0f) + ones((word >> 7) & 0x1f) + ones(word & 0x2000)
       assert.strictEqual(c.subCategories.length, ticked, `${f}: ${c.name}`)
       assert.strictEqual(bits & 0xffff, 0, `${f}: ${c.name} uses a low flag bit`)
-      assert.strictEqual(word >> 12, 0, `${f}: ${c.name} uses a high category-word bit`)
+      assert.strictEqual(word & 0xd000, 0, `${f}: ${c.name} uses an unnamed category-word bit`)
     }
   }
   assert.strictEqual(primaryCategory(['Lighting', 'Navigation']), 'Navigation')

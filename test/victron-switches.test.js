@@ -69,10 +69,10 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(async status => {
   assert.strictEqual(objects['/SwitchableOutput/Light_3/Settings/Type'].SetValue([[{ type: 'i' }], [2]]), 1)
   assert.strictEqual(objects['/SwitchableOutput/Light_3/Settings/Type'].SetValue([[{ type: 'i' }], [0]]), 0)
   // Current shown in the label while on (Light 2 is on at 1.5 A)
-  assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Settings/CustomName'), ['s', 'Light 2 · 1.5 A'])
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Settings/CustomName'), ['s', 'Light 2 (1.5 A)'])
   // A rename from the GUI keeps the name, not the amps
-  objects['/SwitchableOutput/Light_2/Settings/CustomName'].SetValue([[{ type: 's' }], ['Saloon · 1.5 A']])
-  assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Settings/CustomName'), ['s', 'Saloon · 1.5 A'])
+  objects['/SwitchableOutput/Light_2/Settings/CustomName'].SetValue([[{ type: 's' }], ['Saloon (1.5 A)']])
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Settings/CustomName'), ['s', 'Saloon (1.5 A)'])
   sk['electrical.czone.Light_2.switch.state'] = { value: false }
   deltaListener({ path: 'electrical.czone.Light_2.switch.state', value: false })
   assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Settings/CustomName'), ['s', 'Saloon'])
@@ -116,6 +116,19 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(async status => {
   assert.strictEqual(sent['/SwitchableOutput/Light_5/State'], 1)
   assert.strictEqual(sent['/SwitchableOutput/Light_4/State'], 0)
   assert('/SwitchableOutput/Light_1/Settings/CustomName' in sent)
+  // The GX orders switches alphabetically by label: the amps must not move one.
+  {
+    const off = ['Freezer', 'Freezer Temp Control', 'Freezer Temp Set-point', 'Fridge', 'Fridge Temp Control']
+    const on = ['Freezer (3.0 A)', 'Freezer Temp Control (0.1 A)', 'Freezer Temp Set-point', 'Fridge (2.4 A)', 'Fridge Temp Control']
+    for (const cmp of [(a, b) => (a < b ? -1 : a > b ? 1 : 0), (a, b) => a.localeCompare(b), (a, b) => a.toLowerCase().localeCompare(b.toLowerCase())]) {
+      assert.deepStrictEqual([...off].reverse().sort(cmp), off)
+      assert.deepStrictEqual([...on].reverse().sort(cmp), on)
+    }
+    // A rename typed on the GX with either form of suffix keeps the name only.
+    objects['/SwitchableOutput/Light_2/Settings/CustomName'].SetValue([[{ type: 's' }], ['Saloon · 1.5 A']])
+    assert(/^Saloon( \(1\.5 A\))?$/.test(get('/SwitchableOutput/Light_2/Settings/CustomName')[1]))
+  }
+
   // /victron/status: which circuits the pane has as on, and any that differ
   // from Signal K (none here), plus whether the resync is running.
   const rep = sw.status()

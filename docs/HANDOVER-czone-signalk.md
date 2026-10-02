@@ -163,7 +163,7 @@ Plain CSV files, no database. Nothing is built or held without storage: with no 
   - Settings: Type (toggle / momentary, or dimmable), Group = CZone category, CustomName, ShowUIControl.
 - **Pane → CZone:** calls the same functions as the webapp buttons (hook in `index.js`), so "Allow sending" still applies. A refusal snaps the switch back.
 - **CZone → pane:** from the plugin's `electrical.czone.<slug>.switch.state/brightness` deltas.
-- **Amps in the label** while on ("Light 1 · 1.5 A"), because Venus OS doesn't display `/Current` yet (Victron community request, 28 Sep 2026). This is a setting.
+- **Amps in the label** while on ("Light 1 (1.5 A)"; written so the GX's alphabetical order is the same on or off), because Venus OS doesn't display `/Current` yet (Victron community request, 28 Sep 2026). This is a setting.
 - Pane-side renames, types and groups are kept in `victron-switches.json` in the plugin data folder.
 
 ### Settings added (plugin config panel)

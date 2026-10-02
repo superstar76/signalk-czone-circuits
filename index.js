@@ -991,7 +991,7 @@ module.exports = function (app) {
           type: 'boolean',
           title: 'Show circuit current in the switch label',
           default: true,
-          description: 'While a circuit is on, its switch reads e.g. "Light 1 · 1.5 A". The Venus OS switch pane does not display current itself yet.'
+          description: 'While a circuit is on, its switch reads e.g. "Light 1 (1.5 A)". The Venus OS switch pane does not display current itself yet.'
         }
       }
     }),

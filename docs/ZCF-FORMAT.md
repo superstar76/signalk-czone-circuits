@@ -153,7 +153,7 @@ Low nibble = NMEA 2000 DC type (0 battery, 1 alternator, 2 converter, 3 solar ce
 
 ## Circuit sub-categories
 
-Flags u32 at circuit record + 10, bits 16..31: House/Habitat, Vessel Critical, Navigation, Electronics, 24-Hour Circuits, Communications, Accessories, Indicators and Alarms, Engine Management, Fans/Ventilation, Lighting, Vessel Management, Pumps, Propulsion Management, Power, Refrigeration. Category word u16 at record + 14: bit 0 Entertainment, 1 Climate, 2 Appliances, 3 Other, 4 Favourites, 5 DC, 6 AC, 7..11 User Definable Circuit Display Category 1..5. "Bilge Pumps" not located.
+Flags u32 at circuit record + 10, bits 16..31: House/Habitat, Vessel Critical, Navigation, Electronics, 24-Hour Circuits, Communications, Accessories, Indicators and Alarms, Engine Management, Fans/Ventilation, Lighting, Vessel Management, Pumps, Propulsion Management, Power, Refrigeration. Category word u16 at record + 14: bit 0 Entertainment, 1 Climate, 2 Appliances, 3 Other, 4 Favourites, 5 DC, 6 AC, 7..11 User Definable Circuit Display Category 1..5, 13 Bilge Pumps (Compass Rose 03.10.26).
 
 ## User-defined category names
 
