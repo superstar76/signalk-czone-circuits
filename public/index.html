@@ -101,6 +101,11 @@
     .toggle.pending { opacity:.72; cursor:wait; box-shadow:0 0 0 3px rgba(84,199,255,.18); }
     .toggle:disabled { cursor:wait; }
     .sending { color:#54c7ff; font-size:10px; margin-left:5px; }
+    .circuit-name strong.with-chip { display:flex; align-items:center; }
+    .circuit-name strong.with-chip > span { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+    .temp-chip { flex:none; margin-left:8px; padding:2px 8px; border:1px solid rgba(255,159,88,.35); border-radius:999px; background:rgba(255,159,88,.10); color:#ffb884; font:inherit; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; cursor:pointer; vertical-align:1px; }
+    .temp-chip small { display:inline; margin:0 0 0 2px; font-size:10px; font-weight:500; color:inherit; opacity:.8; }
+    .temp-chip:hover { border-color:#ff9f58; }
     .toggle-amps { display:block; font-size:10px; font-weight:600; opacity:.85; letter-spacing:0; margin-top:1px; }
     .toggle.on { background:linear-gradient(135deg,#1cbd78,#168d5b); border-color:rgba(100,228,170,.55); color:#fff; }
     .toggle.off { background:#172b40; color:#c4d4e3; }
@@ -302,7 +307,15 @@
     const toggle = `<button type="button" class="toggle ${on?'on':'off'} ${disabled?'pending':''}" ${disabled?'disabled':''} aria-busy="${disabled?'true':'false'}" aria-label="Turn ${on?'off':'on'} ${esc(c.name)}" onclick="toggleCircuit('${encodeURIComponent(c.name)}',${!on})">${disabled?'Sending…':(on?`ON${typeof c.current === 'number' ? `<small class="toggle-amps">${c.current.toFixed(1)} A</small>` : ''}`:'OFF')}</button>`;
     const control = dim ? `<div class="control"><div class="range-wrap"><input aria-label="${esc(c.name)} brightness" type="range" min="1" max="100" value="${Math.max(1,Math.round(pct ?? 100))}" oninput="previewPercent(this)" onchange="setLevel('${encodeURIComponent(c.name)}',this.value)"><span class="percent">${pct == null ? '—' : Math.round(pct)+'%'}</span></div>${toggle}</div>` : `<div class="control">${toggle}</div>`;
     const sending = p ? `<span class="sending">Sending…</span>` : '';
-    return `<div class="circuit"><button class="fav ${fav?'on':''}" title="${fav?'Remove from':'Add to'} favorites" onclick="toggleFavorite('${esc(nameKey(c)).replace(/'/g,"\\'")}')">${fav?'★':'☆'}</button><div class="circuit-name"><strong>${esc(c.name)}</strong><small>${esc(c.masterCategory || 'CZone')} · module ${Number(c.module).toString(16).padStart(2,'0').toUpperCase()} / ch ${c.channel}</small></div><div class="tags"><span class="tag">${esc(c.masterCategory || 'CZone')}</span>${cats}</div><div><div class="status ${on?'on':''}"><span class="status-dot"></span>${on?'ON':'OFF'} ${sending}</div>${control}</div><button type="button" class="arrow trend-arrow" title="Current trend" aria-label="${esc(c.name)} current trend" onclick="window.czoneMonitor && window.czoneMonitor.trendPath('electrical.czone.${esc(c.slug)}.current')">›</button></div>`;
+    return `<div class="circuit"><button class="fav ${fav?'on':''}" title="${fav?'Remove from':'Add to'} favorites" onclick="toggleFavorite('${esc(nameKey(c)).replace(/'/g,"\\'")}')">${fav?'★':'☆'}</button><div class="circuit-name">${typeof c.temperature === 'number' ? `<strong class="with-chip"><span>${esc(c.name)}</span>${tempChip(c)}</strong>` : `<strong>${esc(c.name)}</strong>`}<small>${esc(c.masterCategory || 'CZone')} · module ${Number(c.module).toString(16).padStart(2,'0').toUpperCase()} / ch ${c.channel}</small></div><div class="tags"><span class="tag">${esc(c.masterCategory || 'CZone')}</span>${cats}</div><div><div class="status ${on?'on':''}"><span class="status-dot"></span>${on?'ON':'OFF'} ${sending}</div>${control}</div><button type="button" class="arrow trend-arrow" title="Current trend" aria-label="${esc(c.name)} current trend" onclick="window.czoneMonitor && window.czoneMonitor.trendPath('electrical.czone.${esc(c.slug)}.current')">›</button></div>`;
+  }
+
+  // [fork] The temperature that belongs to a circuit (an input named
+  // "<circuit> Temperature"), beside its name; click for its trend.
+  function tempChip(c) {
+    if (typeof c.temperature !== 'number') return '';
+    const trend = c.temperatureTrend ? ` onclick="window.czoneMonitor && window.czoneMonitor.trendPath('${esc(c.temperatureTrend)}')" title="Temperature trend"` : '';
+    return `<button type="button" class="temp-chip"${trend}>${(c.temperature - 273.15).toFixed(1)}<small>°C</small></button>`;
   }
 
   function previewPercent(el) { const out=el.parentElement.querySelector('.percent'); out.textContent=el.value+'%'; }
@@ -401,6 +414,14 @@
         return true;
       }
       return false;
+    }
+    const tmp = /^electrical\.czone\.([^\.]+)\.temperature$/.exec(path || '');
+    if (tmp) {
+      const c = circuitBySlug(tmp[1]);
+      const v = typeof value === 'number' ? value : null;
+      if (!c || c.temperature === v) return false;
+      c.temperature = v;
+      return true;
     }
     const cur = /^electrical\.czone\.([^\.]+)\.current$/.exec(path || '');
     if (cur) {
@@ -578,6 +599,7 @@
       subscribe.push({ path: `electrical.czone.${c.slug}.switch.state`, policy: 'instant' });
       if (c.capabilities && c.capabilities.dimmer) subscribe.push({ path: `electrical.czone.${c.slug}.switch.brightness`, policy: 'instant' });
       subscribe.push({ path: `electrical.czone.${c.slug}.current`, policy: 'instant' });
+      if (c.temperatureTrend) subscribe.push({ path: `electrical.czone.${c.slug}.temperature`, policy: 'instant' });
     }
     console.debug('[CZone WS] subscribing to', subscribe.length, 'exact circuit paths');
     socket.send(JSON.stringify({ context:'vessels.self', subscribe }));

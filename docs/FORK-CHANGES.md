@@ -43,6 +43,7 @@ One step after `zcf.load()`, shared by the webapp, the Signal K paths and the Vi
 - **State without a status table** (Compass Rose, Persevere): bit n of PGN 65284 = output channel n.
 - **Every sub-category named** (20 standard ones) and the five user-defined ones read from the ZCF by name (Meitaki: Winches, Furlers, Lithium). `circuit.subCategories` lists all that are ticked, most specific first; `circuit.group` is the first of them, used where a circuit can be in one group only (Victron switch pane). Order: `GROUP_PRIORITY` in `lib/fork-mapping.js`.
 - **Virtual-switch circuits hidden** (all outputs on channel 32 or above), unless the setting is ticked.
+- **Circuits not on any CZone display** (no control that is "All Display Interfaces", a display / chartplotter, or the Wireless Interface) are marked `hidden`: left out of the webapp list (`/circuits` names them in `notShown`) and the Victron pane, still decoded and published to Signal K. Setting `showNonDisplayCircuits` shows them.
 
 ## 2b. AC and third-party readings
 
@@ -91,6 +92,7 @@ One step after `zcf.load()`, shared by the webapp, the Signal K paths and the Vi
 - **Pane edits kept:** renames, groups and types made in the pane are saved.
 - **Dependency:** adds `dbus-native` (same library as other Signal K ↔ Venus plugins).
 - **Device name:** defaults to `CZone <vessel name from the ZCF>`; a name typed in the GX device list is accepted, kept in `victron-switches.json` and survives restarts and new ZCF uploads. Clearing it restores the default.
+- **Temperature in the label:** where a temperature input is named after a circuit ("Freezer" and "Freezer Temperature", ignoring case and punctuation), the switch reads "Freezer (-8.2 °C, 2.9 A)", on or off, in the unit set on the GX (`/Settings/System/Units/Temperature`). A label is 32 bytes: a long name first gets the compact form ("-18°C"), then the name is cut. The temperature is dropped after five minutes without a reading. Also published at `electrical.czone.<slug>.temperature` (kelvin) and shown beside the circuit's name in the webapp (°C), where clicking it opens its trend. Setting `victronSwitchTemperature`.
 - **State source:** the pane takes each circuit's state from the host plugin's decoded state (`getState` handed over with the send functions), the same one the webapp shows; reading it back from Signal K is the fallback. On Compass Rose the pane stayed all-off after a restart while Signal K and the webapp had the right state.
 - **One live service:** the newest instance takes the D-Bus name (replace flags); an older one that finds the name gone retires. A start overtaken by a stop does not carry on. A D-Bus connection error is logged instead of taking Signal K down (stopping the plugin while the connection was still opening crashed the server).
 - **`/victron/status`** lists the circuits the pane has as on, any that differ from Signal K (`mismatch`), and `diag` (process id, instance number, resync count and errors, whether this instance owns the service name).
@@ -142,7 +144,8 @@ public/monitor.css
 test/monitor.test.js, test/victron-switches.test.js,
 test/zcf-circuits.test.js, test/zcf-monitor.test.js,
 test/fork-mapping.test.js, test/control-x-plus.test.js,
-test/ac-legacy.test.js, test/dc-meters.test.js
+test/ac-legacy.test.js, test/dc-meters.test.js,
+test/circuit-temperature.test.js
 test/fixtures/TestBench-2026-10-01.zcf
 docs/ZCF-FORMAT.md
 ```

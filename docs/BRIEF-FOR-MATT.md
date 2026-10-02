@@ -54,7 +54,7 @@ Ordered by impact. Each item has evidence and a suggested fix. None of these nee
 - **Notes:** a record that is off can still carry a raw current of 1 (0.1 A), so treat level 0 as 0 A, as with the Output Interface. Your fast-packet reassembler only accepts 130817/130822, so 130825 needs adding there too.
 - **In our fork:** `lib/monitor/currents.js` decodes it (`decodePackedTable`); `test/control-x-plus.test.js` has the captured payloads.
 
-## 3. Circuit categories and virtual-switch circuits
+## 3. Circuit categories, virtual-switch circuits and circuits not on a display
 
 **New. Both come from Matthew using the plugin on Compass Rose.**
 
@@ -86,6 +86,18 @@ Ordered by impact. Each item has evidence and a suggested fix. None of these nee
 - **User-defined category names** are in the file: a small block straight after the backlight-zone table (the second `u32 length` table after the vessel name): `u8 blockLength`, then five `u8 n | name` strings, then one byte. Meitaki: Winches, Furlers, Lithium (its winch circuits have word bit 7, furlers bit 8, lithium bit 9). Sel Citron: Telecommunications (routers, bit 7). Five empty strings in the other five files. So there are never more than five, and a configuration never has more than 26 sub-categories.
 - **One group where only one fits** (the Victron switch pane shows a switch in one group): we take the first ticked category in this order: user-defined 1 to 5, Indicators and Alarms, Navigation, Refrigeration, Bilge Pumps, Pumps, Lighting, Fans/Ventilation, Climate, Entertainment, Appliances, Electronics, Communications, Engine Management, Propulsion Management, Power, Vessel Management, Accessories, House/Habitat, Vessel Critical, 24-Hour Circuits, Other. Nothing ticked: DC or AC. The webapp keeps listing a circuit under every category it is ticked in, as a CZone display does.
 - **Virtual-switch circuits should be hidden.** Virtual switch *n* of a module is output channel `31 + n` (VS 01 = 32, VS 06 = 37, VS 10 = 41). A circuit whose outputs are all on channel 32 or above only drives virtual switches: Compass Rose's "Fridge 4/6/8 °C", "Freezer 4/-12/-18 °C" and "Test VS", and Sel Citron's two "VS - HWC" circuits. A circuit that also drives a real output ("Freezer": channel 2 and VS 01) is a real circuit. No names involved.
+- **Circuits that are not on any display should not be listed** (the "any display interface" rule from our chat on 3 Oct). Your parser already decodes each circuit's controls. A circuit is on a display when one of them is module `0` ("All Display Interfaces"), a module of type 16 (Display Interface, Touch, chartplotter) or type 17 (Wireless Interface). "All Display Interfaces" alone is not enough: Meitaki puts 84 controls on "Display Companionway" by name, and Sel Citron uses the touch screen and the Wireless Interface separately. What the rule leaves out in the samples:
+
+  | File | Not on any display |
+  |---|---|
+  | Compass Rose | Freezer / Fridge Temp Control, the two "Bilge Pump Running" indicators, High Bilge Water Alarm to Cerbo, E/R Blower |
+  | SugarShack | Wireless Relay Button 1 to 4 (their only control is a switch input on COI 04, so the rule already handles the remote), the four "Solar … Charger CHG" |
+  | Persevere | six "Bilge Pump Running", Buzzer, Ignition Circuit, Spare 1 to 6, and four more switched only by inputs |
+  | Sel Citron | the buzzers, the four keypad "Arch Light … Seq" steps, BMS Warning Light, and five more |
+  | Meitaki | five (three with no controls at all) |
+  | Bench | none |
+
+  We keep them in the mapping, so their state still goes to Signal K, and leave them out of the webapp list and the Victron pane (setting "Show circuits that are not on any CZone display", default off).
 - **In our fork:** `lib/fork-mapping.js` (`prepareMapping`, called once after `zcf.load()`) names every category, reads the user-defined names, sets `circuit.group`, hides virtual-switch circuits (setting "Show virtual switch circuits", default off) and applies item 1's state fallback. `test/fork-mapping.test.js` covers it on all seven files.
 
 ## 4. `getPgnFromCanId` ignores the data-page bit for standard PGNs

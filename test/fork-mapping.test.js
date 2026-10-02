@@ -34,9 +34,10 @@ function run (fixture) {
   plugin.start({ monitorWire: false })
   const routes = {}
   plugin.registerWithRouter({ get: (p, fn) => { routes[p] = fn }, post: () => {}, put: () => {} })
-  const circuits = () => { let out; routes['/circuits']({ query: {}, params: {} }, { json: v => { out = v } }); return Object.fromEntries(out.circuits.map(c => [c.name, c])) }
+  const list = () => { let out; routes['/circuits']({ query: {}, params: {} }, { json: v => { out = v } }); return out }
+  const circuits = () => Object.fromEntries(list().circuits.map(c => [c.name, c]))
   const raw = (id, data) => listeners.get('canboatjs:rawoutput')(`2026-10-03T00:00:00.000Z R ${id} ${data}`)
-  return { plugin, circuits, raw, deltas }
+  return { plugin, circuits, list, raw, deltas }
 }
 
 {
@@ -48,7 +49,8 @@ function run (fixture) {
   assert.strictEqual(c.Lights.statusBit, 4)
   assert.strictEqual(c.Lights.statusConfidence, 'inferred-no-status-table')
   const on = Object.values(c).filter(x => x.state && x.state.state === 'ON').map(x => x.name).sort()
-  assert.deepStrictEqual(on, ['Anchor Light', 'Freezer', 'Freezer Temp Control', 'Fresh Water Pump', 'Fridge Temp Control', 'Lights', 'Toilet', 'VHF'])
+  // (Freezer / Fridge Temp Control are on too, but are not on any display.)
+  assert.deepStrictEqual(on, ['Anchor Light', 'Freezer', 'Fresh Water Pump', 'Lights', 'Toilet', 'VHF'])
   assert.strictEqual(c['Nav Lights'].state.state, 'OFF')
   // Display switches Lights off: bit 4 of module 02 clears.
   raw('1CFF0402', '27 99 02 36 23 0E 01 00')
@@ -165,8 +167,62 @@ function run (fixture) {
 {
   const { plugin, circuits } = run('Compass-Rose-28.06.26.zcf')
   const c = circuits()
-  assert.strictEqual(Object.keys(c).length, 28)
+  assert.strictEqual(Object.keys(c).length, 22) // 35 less 7 virtual-switch circuits and 6 not on any display
   assert(!('Fridge 4⁰C' in c) && 'Fridge' in c)
+  plugin.stop()
+}
+
+// --- Circuits no CZone display lists: none of their Circuit Controls is a
+//     display ("All Display Interfaces", a named display or chartplotter, or
+//     the Wireless Interface).
+{
+  const { hasDisplayControl } = require('../lib/fork-mapping')
+  const hiddenIn = (name, settings = {}) => { const m = zcf.load(path.join(__dirname, 'fixtures', name)); prepareMapping(m, settings); return m.circuits.filter(c => c.hidden).map(c => c.name.trim()).sort() }
+
+  // Compass Rose: "Freezer Temp Control" has one control, the switch input
+  // "Signal K 0 : 4" on the Helm CXP (Configuration Tool, 3 Oct 2026).
+  assert.deepStrictEqual(hiddenIn('Compass-Rose-03.10.26.zcf'), [
+    'E/R Bilge Pump Running', 'E/R Blower', 'FWD Bilge Pump Running', 'Freezer Temp Control', 'Fridge Temp Control', 'High Bilge Water Alarm to Cerbo'])
+  assert.deepStrictEqual(hiddenIn('Compass-Rose-03.10.26.zcf', { showNonDisplayCircuits: true }), [])
+
+  // SugarShack: the wireless remote's buttons are switch inputs on COI 04.
+  const ss = hiddenIn('SugarShack-20260927-01.zcf')
+  for (const n of [1, 2, 3, 4]) assert(ss.includes(`Wireless Relay Button ${n}`))
+  assert(!ss.includes('Starlink') && !ss.includes('Navigation Lights'))
+
+  // Meitaki: nearly everything is on one named display, not "All Display
+  // Interfaces"; those circuits stay.
+  const mei = zcf.load(path.join(__dirname, 'fixtures', 'Meitaki-07.04.25.zcf'))
+  prepareMapping(mei, {})
+  const winch = mei.circuits.find(c => c.name.trim() === 'Control Volt. Winch Prt')
+  assert.deepStrictEqual(winch.zcf.controls.map(k => k.module), [0xf0]) // Display Companionway only
+  assert.strictEqual(winch.hidden, false)
+  assert(mei.circuits.filter(c => c.hidden).length <= 5)
+
+  // Sel Citron: touch screen and Wireless Interface used separately.
+  const sel = zcf.load(path.join(__dirname, 'fixtures', 'Sel-Citron-02.04.25.zcf'))
+  prepareMapping(sel, {})
+  assert(sel.circuits.some(c => !c.hidden && c.zcf.controls.some(k => k.module === 0x07) && !c.zcf.controls.some(k => k.module === 0)))
+  assert(sel.circuits.find(c => c.name.trim() === 'Anchor Drag Buzzer').hidden)
+
+  // Bench: every circuit is on the display; nothing hidden.
+  assert.deepStrictEqual(hiddenIn('TestBench-2026-10-01.zcf'), [])
+
+  // No control list, or no module table: nothing is hidden on missing data.
+  assert.strictEqual(hasDisplayControl({ zcf: {} }, new Map()), true)
+  const noTable = zcf.load(path.join(__dirname, 'fixtures', 'Compass-Rose-03.10.26.zcf'))
+  noTable.modules = []
+  prepareMapping(noTable, {})
+  assert.strictEqual(noTable.circuits.filter(c => c.hidden).length, 0)
+
+  // The plugin: left out of /circuits (named in notShown), still published to Signal K.
+  const { plugin, list, raw, deltas } = run('Compass-Rose-03.10.26.zcf')
+  raw('1CFF0400', '27 99 01 36 0C 00 01 00') // module 01: channels 2, 3 and 16 on
+  const out = list()
+  assert(!out.circuits.some(c => c.name === 'Freezer Temp Control'))
+  assert(out.notShown.includes('Freezer Temp Control') && out.notShown.length === 6)
+  const published = deltas.flatMap(d => d.updates.flatMap(u => u.values.map(v => v.path)))
+  assert(published.includes('electrical.czone.Freezer_Temp_Control.switch.state'))
   plugin.stop()
 }
 

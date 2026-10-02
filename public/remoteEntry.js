@@ -80,8 +80,16 @@ var signalk_czone_circuits = (function () {
       persist({ victronSwitchCurrent: value })
     }
 
+    function setVictronSwitchTemperature (value) {
+      persist({ victronSwitchTemperature: value })
+    }
+
     function setShowVirtualCircuits (value) {
       persist({ showVirtualCircuits: value })
+    }
+
+    function setShowNonDisplayCircuits (value) {
+      persist({ showNonDisplayCircuits: value })
     }
 
     function setTrendDirectory (value) {
@@ -248,7 +256,12 @@ var signalk_czone_circuits = (function () {
           React.createElement('input', { type: 'checkbox', checked: configuration.showVirtualCircuits === true, disabled: busy, onChange: function (e) { setShowVirtualCircuits(e.target.checked) } }),
           ' Show virtual switch circuits'
         ),
-        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Circuits that only drive CZone virtual switches (VS 01, VS 02, …) are hidden from the webapp and the Victron switch pane unless this is ticked.')
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Circuits that only drive CZone virtual switches (VS 01, VS 02, …) are hidden from the webapp and the Victron switch pane unless this is ticked.'),
+        React.createElement('label', { style: { display: 'block', marginTop: 12 } },
+          React.createElement('input', { type: 'checkbox', checked: configuration.showNonDisplayCircuits === true, disabled: busy, onChange: function (e) { setShowNonDisplayCircuits(e.target.checked) } }),
+          ' Show circuits that are not on any CZone display'
+        ),
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'A circuit with no display among its Circuit Controls (thermostat feeds, "pump running" indicators, alarm relays) is left out of the webapp and the Victron switch pane, as on a CZone display. Its state is still published to Signal K.')
       ),
 
       React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
@@ -260,6 +273,10 @@ var signalk_czone_circuits = (function () {
         React.createElement('label', { style: { display: 'block', marginTop: 8 } },
           React.createElement('input', { type: 'checkbox', checked: configuration.victronSwitchCurrent !== false, disabled: busy || configuration.victronSwitches !== true, onChange: function (e) { setVictronSwitchCurrent(e.target.checked) } }),
           ' Show circuit current in the switch label (e.g. "Light 1 (1.5 A)")'
+        ),
+        React.createElement('label', { style: { display: 'block', marginTop: 8 } },
+          React.createElement('input', { type: 'checkbox', checked: configuration.victronSwitchTemperature !== false, disabled: busy || configuration.victronSwitches !== true, onChange: function (e) { setVictronSwitchTemperature(e.target.checked) } }),
+          ' Show temperature in the switch label where an input is named after the circuit (e.g. "Freezer (-8.2 °C, 2.9 A)")'
         )
       ),
 

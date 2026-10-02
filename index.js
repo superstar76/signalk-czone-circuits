@@ -169,6 +169,7 @@ module.exports = function (app) {
       const userNames = r.userCategories.filter(Boolean)
       if (userNames.length) log(`User-defined circuit categories: ${userNames.join(', ')}`)
       if (r.virtualHidden) log(`${r.virtualHidden} virtual-switch circuits hidden`)
+      if (r.notOnDisplays) log(`${r.notOnDisplays} circuits without a display control not shown: ${mapping.circuits.filter(c => c.hidden).map(c => c.name.trim()).join(', ')}`)
       if (r.inferredState) log(`No status table in the ZCF: circuit state inferred from module/channel for ${r.inferredState} circuits`)
     }
     mapping.commandDeviceId = selectCommandDeviceId(mapping)
@@ -975,6 +976,12 @@ module.exports = function (app) {
           default: 0,
           description: 'Ten-minute summaries are always kept. When storage runs low, the oldest full-detail days are removed first, then the oldest summaries.'
         },
+        showNonDisplayCircuits: {
+          type: 'boolean',
+          title: 'Show circuits that are not on any CZone display',
+          default: false,
+          description: 'A circuit with no display among its Circuit Controls (switched only by switch inputs or other circuits: thermostat feeds, "pump running" indicators, alarm relays) is left out of the webapp and the Victron switch pane, as it is on a CZone display. Its state is still published to Signal K.'
+        },
         showVirtualCircuits: {
           type: 'boolean',
           title: 'Show virtual switch circuits',
@@ -986,6 +993,12 @@ module.exports = function (app) {
           title: 'Show CZone circuits in the Victron switch pane',
           default: false,
           description: 'Venus OS 3.60+ only. Adds every circuit to the GX switch pane (and VRM), grouped by CZone category. Switching from the pane still needs NMEA 2000 sending enabled.'
+        },
+        victronSwitchTemperature: {
+          type: 'boolean',
+          title: 'Show temperature in the switch label',
+          default: true,
+          description: 'Where a temperature input is named after a circuit ("Freezer" and "Freezer Temperature"), its switch reads e.g. "Freezer (-8.2 °C, 2.9 A)", in the temperature unit set on the GX.'
         },
         victronSwitchCurrent: {
           type: 'boolean',
@@ -1115,12 +1128,21 @@ module.exports = function (app) {
           warnings: mapping ? mapping.warnings : [],
           modes: mapping ? mapping.modes : [],
           activeMode: activeMode ? { id: activeMode.id, runtimeId: activeMode.runtimeId, name: activeMode.name, slug: activeMode.slug, modeGroupId: activeMode.modeGroupId } : null,
+          // [fork] circuits no CZone display lists (no display control) are
+          // left out of the webapp; named here so it is clear where they went.
+          notShown: mapping ? mapping.circuits.filter(c => c.hidden).map(c => c.name.trim()) : [],
           circuits: mapping
-            ? mapping.circuits.map(c => ({
-                ...c,
-                state: runtimeState.get(c.name) || null,
-                current: monitor.valueAt(`electrical.czone.${c.slug}.current`)
-              }))
+            ? mapping.circuits.filter(c => !c.hidden).map(c => {
+                // [fork] the temperature input named after the circuit, if any (kelvin)
+                const t = monitor.temperatureFor(c.slug)
+                return {
+                  ...c,
+                  state: runtimeState.get(c.name) || null,
+                  current: monitor.valueAt(`electrical.czone.${c.slug}.current`),
+                  temperature: t ? t.kelvin : undefined,
+                  temperatureTrend: t ? t.trend : undefined
+                }
+              })
             : []
         })
       })
