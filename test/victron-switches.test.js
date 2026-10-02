@@ -117,5 +117,24 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(async status => {
   assert.strictEqual(sent['/SwitchableOutput/Light_4/State'], 0)
   assert('/SwitchableOutput/Light_1/Settings/CustomName' in sent)
   sw.stop()
+
+  // Device name: defaults to the vessel name in the ZCF; a name typed on the
+  // GX is accepted, kept across restarts, and clearing it restores the default.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vsw-name-'))
+  const app2 = { ...app, getDataDirPath: () => dir }
+  const name = () => objects['/CustomName'].GetValue()
+  let sw2 = createVictronSwitches(app2, { version: 'test' })
+  await sw2.start({ victronSwitches: true }, zcf, { bus })
+  assert.deepStrictEqual(name(), ['s', 'CZone Test Bench'])
+  assert.strictEqual(objects['/CustomName'].SetValue([[{ type: 's' }], ['CZone']]), 0)
+  assert.deepStrictEqual(name(), ['s', 'CZone'])
+  sw2.stop()
+  sw2 = createVictronSwitches(app2, { version: 'test' })
+  await sw2.start({ victronSwitches: true }, zcf, { bus })
+  assert.deepStrictEqual(name(), ['s', 'CZone'])
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'victron-switches.json'), 'utf8')).deviceName, 'CZone')
+  assert.strictEqual(objects['/CustomName'].SetValue([[{ type: 's' }], ['']]), 0)
+  assert.deepStrictEqual(name(), ['s', 'CZone Test Bench'])
+  sw2.stop()
   console.log('Victron switch pane tests passed')
 }).catch(err => { console.error(err); process.exit(1) })

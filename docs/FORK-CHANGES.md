@@ -90,6 +90,7 @@ One step after `zcf.load()`, shared by the webapp, the Signal K paths and the Vi
 - **Current in the label:** "Light 1 · 0.1 A" while on (optional), because Venus OS doesn't display `/Current` yet.
 - **Pane edits kept:** renames, groups and types made in the pane are saved.
 - **Dependency:** adds `dbus-native` (same library as other Signal K ↔ Venus plugins).
+- **Device name:** defaults to `CZone <vessel name from the ZCF>`; a name typed in the GX device list is accepted, kept in `victron-switches.json` and survives restarts and new ZCF uploads. Clearing it restores the default.
 
 ## 6. ZCF parsing
 
