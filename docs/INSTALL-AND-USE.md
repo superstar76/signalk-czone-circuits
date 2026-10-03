@@ -173,7 +173,7 @@ On a Victron GX, the circuits can appear as switches on the GX screen, in Remote
 What you get:
 
 - **One switch per circuit**, a slider for a dimmable circuit, grouped by CZone category.
-- **The label** shows the name, then the temperature and the current: "Freezer (-8.2 °C, 2.9 A)". Temperature follows the unit set on the GX. Both can be turned off in the settings.
+- **The label** shows the name, then the temperature and the current: "Freezer (-8.2 °C, 2.9 A)". Temperature follows the unit set on the GX. Both can be turned off in the settings. The label is deliberately steady: it ignores wobbles of 0.1, so it can differ slightly from the exact current the GX shows beside it.
 - **Both directions:** a change made anywhere shows in the pane, and a tap in the pane switches the circuit.
 - **Renaming:** names, groups and the device name can be edited on the GX and are kept.
 - **Order:** the GX lists switches alphabetically within a group. That cannot be changed.
@@ -194,7 +194,7 @@ Setting it up, in **Plugin Config → Navico MFD Embedder**:
 3. **Authentication:** set the level to **Admin** and press **Generate Authentication Token**; approve the request under **Security → Access Requests** in a second browser tab, then return and press **Save Configuration**.
 4. **Client IP whitelist:** add the plotter's IP address, so only the plotter can use that login.
 
-A **CZone Circuits** tile then appears on the plotter. On the plotter the page uses a touch layout: larger rows and buttons, and you scroll by dragging.
+A **CZone Circuits** tile then appears on the plotter. On the plotter the page uses a touch layout with larger rows and buttons. To move through the list, use the up and down buttons at the right edge, or drag the list.
 
 Notes:
 

@@ -95,6 +95,7 @@ An opt-in setting registers the circuits with the GX as `com.victronenergy.switc
 - **Groups:** one group per circuit, taken from its CZone sub-category (see 1.6).
 - **Label:** the name, then the temperature and the current: "Freezer (-8.2 °C, 2.9 A)", "Fridge (5.1 °C)", "Lights (1.9 A)". The temperature is in the unit set on the GX. A label is limited to 32 characters: a long name first gets a compact temperature ("-18°C"), then the name is cut.
 - **Order:** the GX lists switches alphabetically by label and has no other order. The label is written so a switch stays in the same place whether it is on or off.
+- **A steady label:** each change of a switch's name makes the GX re-sort its lists and jump to the selected row. So a reading that only wobbles (1.9 A, 2.0 A, 1.9 A) no longer changes the label. A step of 0.2 A or half a degree shows at once, as do on and off; a smaller change shows once it has held for two minutes (current) or five (temperature). The GX's own current column is always exact.
 - **Edits made on the GX are kept:** switch names, groups and types, and the device's own name.
 
 ### 1.6 The circuit list
@@ -113,6 +114,7 @@ An opt-in setting registers the circuits with the GX as `com.victronenergy.switc
   | State with no status table | the first load listed (Instruments followed the autopilot) | its own load |
 
   The other circuits it switches are in the hover text ("Also switches: Buzzer"). A circuit that owns no load at all (SugarShack's All Lights On, Welcome Home) is a group and shows no load, like a Mode.
+- **No flicker, and sliders stay put.** The lists (circuits, navigation, categories, Modes, Monitoring) are updated in place instead of being rebuilt on every live update. A dimmer slider follows the boat but is not pulled away while it is being moved.
 - **Not logged in is said plainly.** When Signal K refuses the plugin's data, the page says "Not logged in to Signal K" and links to the login, instead of showing an empty list under "Connected". A login is kept per address, so `venus.local` and the IP address each need their own.
 - **The category list follows the tab.** On AC, DC, In Use or Favorites, only the categories of the circuits in that tab are listed, with counts for that tab. A category narrows the tab; a second click clears it. On Monitoring the list is the monitoring groups.
 
@@ -126,9 +128,11 @@ An opt-in setting registers the circuits with the GX as `com.victronenergy.switc
 A Navico plotter (B&G, Simrad, Lowrance) on the same Ethernet network as Signal K can show the webapp as a tile. The plotter's browser is Chromium 69 and cannot run Signal K's pages as they are, so the tile comes from another plugin, `signalk-navico-embedder`, which converts pages on the way through and supplies the login token.
 
 - **Layout:** the page recognises the plotter (the plotter's own parameters on the address, or the embedder's token) and switches to a touch layout: larger rows and buttons, no banner, the category and status chips dropped, drawn icons in place of symbol characters the plotter's fonts lack. A desktop browser never sees it; `?layout=mfd` shows it for testing.
-- **Scrolling:** the plotter's touch arrives as mouse events, so a drag selected text and nothing scrolled. The page now scrolls the list or the left column on a drag, and the release is not taken as a tap.
+- **Scrolling:** the plotter's touch arrives as mouse events, so a drag selected text and nothing scrolled. Two ways are now offered: page-up and page-down buttons at the right edge, and dragging the list or the left column, where the release is not taken as a tap. On the first try on the plotter the drag worked but lagged the finger by about a second, so the page buttons were added, drag positions are applied once per frame, redraws caused by live data wait while a finger is down, and the plotter styles were made cheap to draw (no shadows, gradients or transitions).
+- **Updates reach the plotter by themselves:** the plotter kept showing the page it first loaded until it was restarted. The page now checks once a minute whether its script has changed on the server and reloads once if so.
+- **A readout for diagnosis:** five taps on the "Connected" line show the last input events the plotter sent, the frame time and the time to redraw the list. There is no other way to see inside that browser.
 - **Compatibility:** the page's own script avoids syntax newer than that browser (the embedder converts separate script files but not the code inside a page).
-- **Tested** on Compass Rose (Simrad NSS evo3S): the tile appears, the page loads with live state, and circuits switch from the plotter. The touch layout and drag scrolling were built after that test and checked against a real Chromium 69 build, driven by a simulated mouse; they have not yet been seen on the plotter.
+- **Tested** on Compass Rose (Simrad NSS evo3S): the tile appears, the page loads with live state, and circuits switch from the plotter. The touch layout has since been seen on the plotter: it draws correctly and switching works, and drag scrolling works but is slow to follow the finger. Everything is also checked against a real Chromium 69 build driven by a simulated mouse, which cannot reproduce the plotter's speed.
 - **Not done yet:** the plotter's day and night mode is not followed, and the trend panel's few remaining symbol characters have not been checked on the plotter.
 - **Setting it up:** the plotter and the Signal K machine must be on the same network segment. In the embedder: the IP override set to that machine's wired address, the CZone Circuits app enabled, and an admin token (the plugin's own interface needs a login). On Compass Rose the embedder's own "Generate" button did not deliver a token; one made with `signalk-generate-token` and written into the embedder's settings did. Restrict the embedder's client list to the plotter's address, since the token carries admin rights.
 - **The built-in Signal K tile is not this.** A GX running Venus OS Large advertises a Signal K tile to the plotter by itself, but it opens Signal K's admin page, which that browser cannot draw (a white screen on Signal K 2.27).
@@ -230,6 +234,8 @@ All under `/plugins/signalk-czone-circuits`.
 | Empty circuit list under "Connected" | Signal K refused the plugin's data (no login at that address) and the page did not say so | Page says "Not logged in to Signal K" with a link |
 | White screen from the plotter's Signal K tile | It opens Signal K's admin page, too modern for the plotter's browser | Our webapp served through `signalk-navico-embedder`; page script kept within that browser's syntax |
 | Could not scroll on the plotter; a drag selected text | The plotter's touch arrives as mouse events | Drag-to-scroll and no text selection in the plotter layout |
+| The GX's Outputs list jumped about every few seconds | The label carried live amps, and every 0.1 A wobble renamed the switch, which makes the GX re-sort and jump to the selected row | Label held steady against small wobbles |
+| ON buttons flickered every few seconds (seen on the plotter) | Every list was rebuilt whole on each live update, and the amps under ON change constantly | Lists are updated in place: a changed reading changes one piece of text |
 
 ## 8. Files
 
@@ -255,7 +261,7 @@ public/monitor.css
 docs/INSTALL-AND-USE.md   installation and use, for the person fitting or using the plugin
 docs/ZCF-FORMAT.md        layouts, checked across the sample ZCFs
 docs/venus-sdcard-rw.sh   a copy of the card script, for reading
-test/                     10 new test files, 2 new ZCF fixtures
+test/                     11 new test files, 2 new ZCF fixtures
 ```
 
 Changes to Matt's files:
@@ -269,7 +275,7 @@ Changes to Matt's files:
 
 ## 9. Tests
 
-`npm test` runs Matt's suite and the fork's, 22 files, all passing. The fork's tests use frames captured on the bench and on Compass Rose, and eight sample ZCFs (two bench, two Compass Rose, Meitaki, Persevere, Sel Citron, SugarShack).
+`npm test` runs Matt's suite and the fork's, 23 files, all passing. The fork's tests use frames captured on the bench and on Compass Rose, and eight sample ZCFs (two bench, two Compass Rose, Meitaki, Persevere, Sel Citron, SugarShack).
 
 The webapp pages are not covered by `npm test`. They were checked by hand in a current Chromium and, for the chartplotter layout, in Chromium 69.0.3494, the version the plotter runs: layout, drag scrolling of the list and of the left column, a drag from a button not switching it, a tap switching it, and the desktop page unchanged.
 
@@ -292,7 +298,8 @@ The webapp pages are not covered by `npm test`. They were checked by hand in a c
 | Label shows the circuit's own load | not yet confirmed there | yes |
 | Instruments state from its own load | does not apply | installed; not yet confirmed against the boat |
 | Chartplotter tile (loads, live state, switching) | no plotter | yes (NSS evo3S) |
-| Chartplotter touch layout and drag scrolling | no plotter | built and tested in Chromium 69; not yet installed |
+| Chartplotter touch layout | no plotter | yes |
+| Chartplotter scrolling | no plotter | drag works but lags; page buttons and smoother drag built, not yet tried |
 
 The bench was updated on the evening of 3 October; rows marked "not re-checked" or "not yet confirmed" are still to be checked there. Both Cerbos have Tailscale, so either can be reached from the other site.
 

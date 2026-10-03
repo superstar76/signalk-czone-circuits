@@ -237,6 +237,24 @@
     .mfd .arrow { font-size:26px; padding:8px 4px; }
     .mfd .mode-button { min-height:50px; font-size:15px; }
     .mfd .empty { font-size:15px; }
+    /* Cheap to draw: the plotter redraws the page in software as it scrolls. */
+    .mfd, .mfd body { background:#06101d; }
+    .mfd * { box-shadow:none !important; text-shadow:none !important; transition:none !important; }
+    .mfd .section { background:#0a1a2b; }
+    .mfd .leftwell { background:#07121f; }
+    .mfd .toggle.on { background:#1aa56a; }
+    .mfd .nav button.active { background:#12456e; }
+    .mfd .category-card, .mfd .category-nav .category-card.active { background:#0f2740; }
+    .mfd .category-card:hover { transform:none; }
+    .mfd .circuit:hover, .mfd .nav button:hover, .mfd .category-nav button:hover { background:transparent; }
+    .mfd .nav button.active:hover { background:#12456e; }
+    /* Page buttons in a gutter of their own, clear of the ON/OFF buttons. */
+    .mfd .main { padding-right:84px; }
+    .mfd-pager { position:fixed; right:12px; top:50%; margin-top:-70px; z-index:5; }
+    .mfd-pager button { display:block; width:60px; height:64px; margin-bottom:12px; border:1px solid rgba(148,193,235,.30); border-radius:14px; background:#12304b; color:#dbe9f6; cursor:pointer; }
+    .mfd-pager button:active { background:#1b4a73; }
+    .mfd-pager svg.ico { width:30px; height:30px; margin:0 auto; stroke-width:2.5; }
+    .mfd-probe { position:fixed; left:8px; bottom:8px; z-index:9; margin:0; padding:8px 10px; max-width:70%; font:12px/1.35 monospace; color:#d6f5d6; background:rgba(0,0,0,.88); border:1px solid #2c6; border-radius:8px; white-space:pre; pointer-events:none; }
   </style>
   <link rel="stylesheet" href="monitor.css">
 </head>
@@ -274,6 +292,7 @@
   </div>
 <script>
 (() => {
+  const OWN_SCRIPT = document.currentScript ? document.currentScript.textContent : null; // see "a newer page" below
   const API = '/plugins/signalk-czone-circuits';
   const SK = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/signalk/v1/stream?subscribe=none`;
   const categoryIcons = { Lighting:'💡', Navigation:'◉', Pumps:'♨', Power:'⚡', Entertainment:'♫', 'Fans/Ventilation':'✣', Electronics:'▦', Climate:'❄', Galley:'🍴', 'Deck Equipment':'⚓', Safety:'⬟', Miscellaneous:'•••', Refrigeration:'❆', 'Bilge Pumps':'♨', 'House/Habitat':'⌂', 'Vessel Critical':'⚠', '24-Hour Circuits':'◷', Communications:'☎', Accessories:'✚', 'Indicators and Alarms':'🔔', 'Engine Management':'⚙', 'Vessel Management':'⚓', 'Propulsion Management':'✇', Appliances:'▤', Other:'•••' };
@@ -365,6 +384,37 @@
   const icon = c => MFD ? mfdIcon(c) : (categoryIcons[c] || '•');
   const color = c => categoryColors[c] || '#4bb5ff';
 
+  // [fork] Put new HTML into a list without rebuilding the list. Every list was
+  // replaced wholesale on each live update. On a slow screen that shows as a
+  // flicker of the ON buttons every few seconds (the amps under ON change, so
+  // the whole list was rebuilt); anywhere, it drops a hover and resets a
+  // slider being moved. Now only what differs is touched: a changed amp
+  // reading changes one piece of text and nothing else is redrawn.
+  const patched = new WeakMap(); // element -> the HTML it was last given
+  function morph(a, b) {
+    if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) { a.parentNode.replaceChild(b, a); return; }
+    if (a.nodeType === 3) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
+    if (a.nodeType !== 1) return;
+    for (const at of Array.from(b.attributes)) if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+    for (const at of Array.from(a.attributes)) if (!b.hasAttribute(at.name)) a.removeAttribute(at.name);
+    // A slider shows its property, not its attribute; leave one that is being moved.
+    if (a.nodeName === 'INPUT' && a !== document.activeElement && b.hasAttribute('value') && a.value !== b.getAttribute('value')) a.value = b.getAttribute('value');
+    const ac = Array.from(a.childNodes), bc = Array.from(b.childNodes);
+    if (ac.length !== bc.length) { a.innerHTML = b.innerHTML; return; }
+    for (let i = 0; i < bc.length; i++) morph(ac[i], bc[i]);
+  }
+  function patch(el, html) {
+    if (!el || patched.get(el) === html) return;
+    const known = patched.has(el);
+    patched.set(el, html);
+    const next = document.createElement(el.nodeName);
+    next.innerHTML = html;
+    if (!known || el.childNodes.length !== next.childNodes.length) { el.innerHTML = html; return; }
+    const ac = Array.from(el.childNodes), bc = Array.from(next.childNodes);
+    for (let i = 0; i < bc.length; i++) morph(ac[i], bc[i]);
+  }
+  window.czonePatch = patch; // the Monitoring tab uses it too
+
   function saveFavorites() { localStorage.setItem(favoritesKey, JSON.stringify([...favorites])); }
   function setView(v) { view=v; category=null; render(); }
   // [fork] A category narrows the current view (AC, DC, In Use, Monitoring…)
@@ -379,7 +429,7 @@
       ['ac','♆','AC',masterCount('AC')], ['dc','▣','DC',masterCount('DC')],
       ['monitor','◔','Monitoring',window.czoneMonitor ? window.czoneMonitor.count() : '']
     ];
-    document.querySelector('#mainNav').innerHTML = items.map(([v,i,t,n]) => `<button class="${view===v?'active':''}" onclick="setView('${v}')"><span class="nav-icon">${MFD ? mfdIcon(v) : i}</span>${t}<span class="nav-count">${n}</span></button>`).join('');
+    patch(document.querySelector('#mainNav'), items.map(([v,i,t,n]) => `<button class="${view===v?'active':''}" onclick="setView('${v}')"><span class="nav-icon">${MFD ? mfdIcon(v) : i}</span>${t}<span class="nav-count">${n}</span></button>`).join(''));
   }
 
   function renderCategories() {
@@ -388,12 +438,12 @@
     if (view==='monitor') { // [fork] the Monitoring tab's own groups: Batteries, Solar, AC Power, Tanks…
       const groups = window.czoneMonitor && window.czoneMonitor.groups ? window.czoneMonitor.groups() : [];
       if (category && !groups.some(g => g.name===category)) category = null;
-      el.innerHTML = groups.map(g => `<button class="category-card ${category===g.name?'active':''}" style="--cat:${g.color}" onclick="setCategory('${esc(g.name).replace(/'/g,"\\'")}')"><div class="cat-icon">${g.icon}</div><div><strong>${esc(g.label)}</strong><span>${g.live} of ${g.count} live</span></div></button>`).join('');
+      patch(el, groups.map(g => `<button class="category-card ${category===g.name?'active':''}" style="--cat:${g.color}" onclick="setCategory('${esc(g.name).replace(/'/g,"\\'")}')"><div class="cat-icon">${g.icon}</div><div><strong>${esc(g.label)}</strong><span>${g.live} of ${g.count} live</span></div></button>`).join(''));
       return;
     }
     const cats = catList();
     if (category && !cats.includes(category)) category = null; // not in this view any more
-    el.innerHTML = cats.map(c => `<button class="category-card ${category===c?'active':''}" style="--cat:${color(c)}" onclick="setCategory('${esc(c).replace(/'/g,"\\'")}')"><div class="cat-icon">${icon(c)}</div><div><strong>${esc(c)}</strong><span>${countCat(c)} circuit${countCat(c)===1?'':'s'}</span></div></button>`).join('');
+    patch(el, cats.map(c => `<button class="category-card ${category===c?'active':''}" style="--cat:${color(c)}" onclick="setCategory('${esc(c).replace(/'/g,"\\'")}')"><div class="cat-icon">${icon(c)}</div><div><strong>${esc(c)}</strong><span>${countCat(c)} circuit${countCat(c)===1?'':'s'}</span></div></button>`).join(''));
   }
 
   function currentList() {
@@ -420,7 +470,7 @@
     document.querySelector('#sectionTitle').textContent = title;
     document.querySelector('#sectionCount').textContent = `${list.length} circuit${list.length===1?'':'s'}`;
     document.querySelector('#sectionIcon').textContent = MFD ? '' : category ? icon(category) : view==='favorites' ? '☆' : view==='inuse' ? '●' : '⚡';
-    document.querySelector('#circuits').innerHTML = list.length ? list.map(circuitRow).join('') : `<div class="empty">No circuits match this view.</div>`;
+    patch(document.querySelector('#circuits'), list.length ? list.map(circuitRow).join('') : `<div class="empty">No circuits match this view.</div>`);
   }
 
   function circuitRow(c) {
@@ -612,9 +662,9 @@
     c.innerHTML = '<i></i><span>Not logged in to Signal K</span>';
     renderNav();
     const el = document.querySelector('#circuits');
-    if (el && !circuits.length) el.innerHTML = MFD
+    if (el && !circuits.length) patch(el, MFD
       ? '<div class="empty">Signal K refused the request. On a chartplotter the login comes from the Navico embedder plugin: generate its authentication token and save.</div>'
-      : '<div class="empty">Signal K needs a login to show the circuits. <a href="/admin/#/login" style="color:#54c7ff">Log in</a>, then reload this page.</div>';
+      : '<div class="empty">Signal K needs a login to show the circuits. <a href="/admin/#/login" style="color:#54c7ff">Log in</a>, then reload this page.</div>');
   }
   async function refreshOnce(reason = 'manual') {
     try {
@@ -687,12 +737,12 @@
     const el = document.querySelector('#modes');
     if (!el) return;
     if (el.parentElement) el.parentElement.classList.toggle('none', !modes.length); // hidden on a plotter when there are none
-    if (!modes.length) { el.innerHTML = '<div class="empty" style="padding:10px 4px">No CZone modes found.</div>'; return; }
-    el.innerHTML = modes.map(m => {
+    if (!modes.length) { patch(el, '<div class="empty" style="padding:10px 4px">No CZone modes found.</div>'); return; }
+    patch(el, modes.map(m => {
       const active = activeMode && activeMode.slug === m.slug;
       const pending = modePending && modePending.slug === m.slug;
       return `<button type="button" class="mode-button ${active?'active':''} ${modePending?'pending':''}" ${modePending?'disabled':''} onclick="activateMode('${encodeURIComponent(m.slug)}')" aria-busy="${pending?'true':'false'}"><div class="mode-name"><span>${esc(m.name === 'Day Crusing' ? 'Day Cruising' : m.name)}</span><span>${pending?'Sending…':active?'ACTIVE':' '}</span></div><div class="mode-state">${active?'Current operating mode':'Select mode'}</div></button>`;
-    }).join('');
+    }).join(''));
   }
 
   window.activateMode = function (slug) {
@@ -715,22 +765,28 @@
 
   function renderStats() {
     const on=activeCount(), total=circuits.length, fav=circuits.filter(c=>favorites.has(nameKey(c))).length;
-    document.querySelector('#stats').innerHTML = `<div class="stat"><div class="stat-icon">⚡</div><div><strong>${total}</strong><span>Total Circuits</span></div></div><div class="stat"><div class="stat-icon">●</div><div><strong>${on}</strong><span>In Use</span></div></div><div class="stat"><div class="stat-icon">○</div><div><strong>${total-on}</strong><span>Off</span></div></div><div class="stat"><div class="stat-icon">★</div><div><strong>${fav}</strong><span>Favorites</span></div></div>`;
+    patch(document.querySelector('#stats'), `<div class="stat"><div class="stat-icon">⚡</div><div><strong>${total}</strong><span>Total Circuits</span></div></div><div class="stat"><div class="stat-icon">●</div><div><strong>${on}</strong><span>In Use</span></div></div><div class="stat"><div class="stat-icon">○</div><div><strong>${total-on}</strong><span>Off</span></div></div><div class="stat"><div class="stat-icon">★</div><div><strong>${fav}</strong><span>Favorites</span></div></div>`);
     const n2kReady = status.nmeaReady === true;
     const readyColor = n2kReady ? '#64e4aa' : '#ffcc77';
     const readyText = n2kReady ? 'NMEA 2000 output ready' : 'NMEA 2000 output waiting';
     const lastOut = status.lastNmeaOutput ? `<br><span style="color:#7f97ad">Last command: ${esc(status.lastNmeaOutput.circuit)} · ${esc(status.lastNmeaOutput.description)}</span>` : '';
-    document.querySelector('#connectionCard').innerHTML = `<div style="color:#a9bfd2;font-size:12px;line-height:1.7"><span style="color:${status.sendingEnabled?'#64e4aa':'#ffcc77'}">● NMEA 2000 sending ${status.sendingEnabled?'enabled':'disabled'}</span><br><span style="color:${readyColor}">● ${readyText}</span>${lastOut}</div>`;
+    patch(document.querySelector('#connectionCard'), `<div style="color:#a9bfd2;font-size:12px;line-height:1.7"><span style="color:${status.sendingEnabled?'#64e4aa':'#ffcc77'}">● NMEA 2000 sending ${status.sendingEnabled?'enabled':'disabled'}</span><br><span style="color:${readyColor}">● ${readyText}</span>${lastOut}</div>`);
   }
 
   function render() { renderNav(); renderCategories(); renderCircuits(); renderStats(); renderModes(); renderHero(); }
 
-  // [fork] Drag to scroll on a chartplotter. Its touch arrives as mouse events,
-  // so a drag would select text and nothing would scroll. A press that moves
-  // more than a few pixels scrolls the nearest scrolling box (the circuit list
-  // or the left column); the tap that ends it is not passed on as a click.
+  // [fork] Scrolling on a chartplotter. Its touch arrives as mouse events, so a
+  // drag would select text and nothing would scroll. Two ways are offered:
+  //  - Page buttons at the right edge: one tap moves most of a screen. They do
+  //    not depend on how well the plotter follows a finger.
+  //  - Drag: a press that moves more than a few pixels scrolls the nearest
+  //    scrolling box (the list or the left column). Positions are applied once
+  //    per frame, and the tap that ends a drag is not passed on as a click.
+  // The plotter is slow, so redraws caused by live data wait while a finger is
+  // down (see liveRender).
+  let mfdBusyUntil = 0; // no data-driven redraw before this time
   if (MFD) {
-    let drag = null, swallow = false;
+    let drag = null, swallow = false, frame = 0;
     const scrollerOf = el => {
       for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
         const oy = getComputedStyle(n).overflowY;
@@ -738,30 +794,124 @@
       }
       return document.scrollingElement || document.documentElement;
     };
+    const applyDrag = () => { frame = 0; if (drag && drag.moved) drag.box.scrollTop = drag.want; };
     document.addEventListener('mousedown', e => {
-      if (e.button !== 0 || (e.target.closest && e.target.closest('input, select, canvas'))) return;
+      if (e.button !== 0 || (e.target.closest && e.target.closest('input, select, canvas, .mfd-pager'))) return;
       const box = scrollerOf(e.target);
-      drag = { box, y: e.clientY, top: box.scrollTop, moved: false };
+      drag = { box, y: e.clientY, top: box.scrollTop, want: box.scrollTop, moved: false, held: false };
+      mfdBusyUntil = Date.now() + 1500;
     }, true);
     document.addEventListener('mousemove', e => {
       if (!drag) return;
-      if (e.buttons === 0) { endDrag(); return; } // released outside the page
+      // Released outside the page. Only trusted once this drag has reported a
+      // held button, since some touch layers never report one.
+      if (e.buttons) drag.held = true; else if (drag.held) { endDrag(); return; }
       const dy = e.clientY - drag.y;
       if (!drag.moved && Math.abs(dy) < 10) return;
       drag.moved = true;
-      drag.box.scrollTop = drag.top - dy;
+      drag.want = drag.top - dy;
+      mfdBusyUntil = Date.now() + 1500;
+      if (!frame) frame = requestAnimationFrame(applyDrag);
       e.preventDefault();
     }, true);
     function endDrag() {
-      if (drag && drag.moved) { swallow = true; setTimeout(() => { swallow = false; }, 80); }
+      if (drag && drag.moved) { applyDrag(); swallow = true; setTimeout(() => { swallow = false; }, 80); }
       drag = null;
+      mfdBusyUntil = Date.now() + 400;
     }
     document.addEventListener('mouseup', endDrag, true);
     window.addEventListener('blur', endDrag);
     document.addEventListener('click', e => { if (swallow) { e.stopPropagation(); e.preventDefault(); swallow = false; } }, true);
     document.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('selectstart', e => { if (!(e.target.closest && e.target.closest('input'))) e.preventDefault(); });
+
+    // Page up / page down.
+    const pager = document.createElement('div');
+    pager.className = 'mfd-pager';
+    pager.innerHTML = '<button type="button" data-dir="-1" aria-label="Page up"><svg class="ico" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7"/></svg></button>' +
+      '<button type="button" data-dir="1" aria-label="Page down"><svg class="ico" viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></button>';
+    pager.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const el = document.scrollingElement || document.documentElement;
+      el.scrollTop += Number(b.dataset.dir) * Math.round(window.innerHeight * 0.8);
+    });
+    document.body.appendChild(pager);
+
+    // A newer page. The plotter keeps showing the page it first loaded, even
+    // after the tile is closed and reopened, so an update never appeared
+    // without restarting the plotter. Once a minute the page fetches itself
+    // and, if its own script has changed on the server, reloads. One attempt
+    // per version, so a plotter that will not let go cannot loop.
+    const checkPage = async () => {
+      try {
+        if (!OWN_SCRIPT) return;
+        const r = await fetch(location.pathname + '?fresh=' + Date.now(), { cache: 'no-store', credentials: 'include' });
+        if (!r.ok) return;
+        const text = await r.text();
+        const found = text.split('<scr' + 'ipt>').map(part => part.split('</scr' + 'ipt>')[0]).find(part => part.indexOf("const API = '/plugins/signalk-czone-circuits'") >= 0);
+        if (!found || found === OWN_SCRIPT) return;
+        const tried = String(found.length) + ':' + found.slice(-200).length + ':' + found.split('\n').length;
+        let before = null;
+        try { before = sessionStorage.getItem('czone-reload'); sessionStorage.setItem('czone-reload', tried); } catch (_) { return; }
+        if (before !== tried) location.reload(true);
+      } catch (_) {}
+    };
+    setTimeout(checkPage, 15000);
+    setInterval(checkPage, 60000);
+
+    // What the plotter actually sends: five taps on the connection line show
+    // the last input events and how long frames and redraws take. For
+    // diagnosing a plotter we cannot connect a debugger to.
+    let taps = [], probe = null;
+    document.querySelector('#connection').addEventListener('click', () => {
+      const now = Date.now();
+      taps = taps.filter(t => now - t < 3000).concat(now);
+      if (taps.length < 5) return;
+      taps = [];
+      if (probe) { probe.remove(); probe = null; return; }
+      probe = document.createElement('pre');
+      probe.className = 'mfd-probe';
+      document.body.appendChild(probe);
+      const log = [];
+      let last = performance.now(), frames = [];
+      const note = e => {
+        const t = performance.now();
+        log.push(`${String(Math.round(t - last)).padStart(5)} ms  ${e.type.padEnd(11)} b=${e.buttons === undefined ? '-' : e.buttons} ${e.pointerType || ''} ${e.touches ? 't' + e.touches.length : ''} ${e.deltaY !== undefined ? 'dy=' + Math.round(e.deltaY) : ''}`);
+        last = t;
+        if (log.length > 16) log.shift();
+      };
+      for (const type of ['mousedown', 'mousemove', 'mouseup', 'click', 'touchstart', 'touchmove', 'touchend', 'pointerdown', 'pointermove', 'pointerup', 'wheel', 'scroll']) document.addEventListener(type, note, true);
+      // Frame time: the gap between two frames in a row. Redraw: rebuilding the list.
+      const tick = () => {
+        if (!probe) return;
+        requestAnimationFrame(t1 => requestAnimationFrame(t2 => {
+          if (!probe) return;
+          frames.push(t2 - t1);
+          if (frames.length > 10) frames.shift();
+          const t0 = performance.now(); renderCircuits(); const redraw = performance.now() - t0;
+          probe.textContent = `${window.innerWidth}x${window.innerHeight}  frame ${Math.round(frames.reduce((a, b) => a + b, 0) / frames.length)} ms  redraw ${Math.round(redraw)} ms\n${navigator.userAgent.replace(/^.*(Chrome\/[\d.]+).*$/, '$1')}\n` + log.join('\n');
+          setTimeout(tick, 700);
+        }));
+      };
+      tick();
+    });
   }
+  // A redraw asked for by live data. Anywhere else it runs at once. On a
+  // plotter it waits until no finger is down, and runs at most twice a second.
+  let liveTimer = null, liveLast = 0;
+  function liveRender() {
+    if (!MFD) { render(); return; }
+    if (liveTimer) return;
+    const run = () => {
+      const now = Date.now();
+      const wait = Math.max(mfdBusyUntil - now, liveLast + 500 - now);
+      if (wait > 0) { liveTimer = setTimeout(run, wait); return; }
+      liveTimer = null; liveLast = now; render();
+    };
+    run();
+  }
+
   document.querySelector('#search').addEventListener('input', e => { query=e.target.value.trim(); view=query?'search':'all'; category=null; render(); });
   document.querySelector('#sort').addEventListener('change', e => { sort=e.target.value; renderCircuits(); });
 
@@ -830,7 +980,7 @@
           console.debug('[CZone WS] delta received', { valuesSeen, circuitValues, changed, updateSource: msg.updates.map(u => u.source || null), updateTimestamp: msg.updates.map(u => u.timestamp || null), timestamp: new Date(lastSocketUpdateAt).toISOString() });
           updateSocketIndicator(circuitValues ? 'Connected · CZone updates live' : 'Connected · WebSocket live', true);
           scheduleWatchdog();
-          if (changed) render();
+          if (changed) liveRender();
         } catch (e) { console.debug('[CZone WS] message parse error', e); }
       };
       socket.onclose = () => {

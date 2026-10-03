@@ -22,6 +22,10 @@
   const PREF_KEY = 'signalk-czone-circuits:monitor';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  // Lists are updated in place where the host page offers it: only values that
+  // changed are touched, so the value boxes do not flicker on a slow screen.
+  const put = (el, html) => { if (window.czonePatch) window.czonePatch(el, html); else el.innerHTML = html }
+
   let items = []
   let trend = { available: false }
   let visible = false
@@ -126,7 +130,7 @@
       if (visible) render()
       if (typeof window.czoneMonitorReady === 'function') window.czoneMonitorReady()
     } catch (e) {
-      if (visible) document.querySelector('#monBody').innerHTML = `<div class="empty">Monitoring data unavailable (${esc(e.message)}).</div>`
+      if (visible) put(document.querySelector('#monBody'), `<div class="empty">Monitoring data unavailable (${esc(e.message)}).</div>`)
     }
   }
   async function refreshTrendStatus () {
@@ -217,17 +221,17 @@
     const mapped = all.filter(i => i.mapped).length
     document.querySelector('#monCount').textContent = `${mapped} of ${all.length} items live`
     const shown = all.filter(i => prefs.showUnmapped || i.mapped)
-    if (!all.length) { body.innerHTML = '<div class="empty">No meters or inputs found in the ZCF.</div>'; return }
-    if (!shown.length) { body.innerHTML = '<div class="empty">Nothing from the ZCF is on the bus yet. Tick “Show unmapped” to see what is expected.</div>'; return }
+    if (!all.length) { put(body, '<div class="empty">No meters or inputs found in the ZCF.</div>'); return }
+    if (!shown.length) { put(body, '<div class="empty">Nothing from the ZCF is on the bus yet. Tick “Show unmapped” to see what is expected.</div>'); return }
     if (groupFilter && !shown.some(i => groupOf(i) === groupFilter)) groupFilter = null // that group has gone
-    body.innerHTML = GROUPS.filter(g => !groupFilter || g === groupFilter).map(g => {
+    put(body, GROUPS.filter(g => !groupFilter || g === groupFilter).map(g => {
       const list = shown.filter(i => groupOf(i) === g)
       if (!list.length) return ''
       const live = list.filter(i => i.mapped).length
       if (g === 'Circuit current') list.sort((a, b) => (primary(b).value || 0) - (primary(a).value || 0) || sortByName(a, b))
       else list.sort(sortByName)
       return `<div class="mon-subhead" style="--cat:${groupVar(g)}"><span class="mon-icon">${groupIcon(g)}</span><strong>${esc(groupLabel(g))}</strong><span class="subtle">${live} of ${list.length} live</span></div>${list.map(row).join('')}`
-    }).join('')
+    }).join(''))
   }
 
   function onClick (e) {
