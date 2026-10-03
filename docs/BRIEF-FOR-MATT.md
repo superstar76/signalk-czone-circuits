@@ -24,7 +24,7 @@ Ordered by impact. Each item has evidence and a suggested fix. None of these nee
   ```
 
   Decoding both modules' bitmaps that way gives a believable set of circuits on (Freezer, Freezer Temp Control, Fresh Water Pump, Fridge Temp Control, Toilet, VHF, Anchor Light, Lights). Note the status subtype byte here is `0x36`.
-- **Suggested fix:** when the ZCF yields no status mapping for any circuit, fall back to `statusModule = module`, `statusBit = channel` (channels 0–31), marked as inferred. Leave ZCFs that do have a status table alone (TestBench load masks).
+- **Suggested fix:** when the ZCF yields no status mapping for any circuit, fall back to `statusModule = module`, `statusBit = channel` (channels 0–31), marked as inferred. Use the circuit's own load for this, not the first one listed (see item 9, Instruments). Leave ZCFs that do have a status table alone (TestBench load masks).
 - **Interim in our fork:** `applyStatusFallback` in `lib/fork-mapping.js` does exactly that, called once after `zcf.load()` in `loadConfiguredZcf`; `test/fork-mapping.test.js` replays the frames above. Drop it when the parser covers this.
 - **Also seen in that capture:** the plugin's own commands go out correctly (`1CFF0065  27 99 0F 00 00 03 F1 08` then `… 40 08`, device id 3). The display uses its own dipswitch (04) and trailer `00`.
 
@@ -151,10 +151,11 @@ Only matters if you start using meters (we use them for monitoring in the fork).
 
 ## 9. Smaller points from this week
 
-**New. None is urgent; the first two are changes we made in your files that you may want.**
+**New. None is urgent; the first three are changes we made in your files that you may want.**
 
 - **Settings panel gives no sign that it saved.** Every control saves as it is changed and Signal K restarts the plugin, but nothing says so. In our fork `public/remoteEntry.js` has a line under the heading ("Changes on this page are saved as you make them") and a green "Saved" notice for a few seconds after each change.
 - **Category list in the webapp.** It listed every category on every tab. In our fork `public/index.html` lists only the categories of the circuits in the current tab (AC, DC, In Use, Favorites), with counts for that tab, and a category narrows the tab instead of leaving it; a second click clears it.
+- **A circuit's module/channel is the first load listed, which can be another circuit's.** `parseCircuitRecords` takes `record.outputs[0]`. On the bench, Light 5 lists the Buzzer's output (DC6) ahead of its own (DC5), so Light 5 and Buzzer both read "module 01 / ch 5" in the webapp. On Compass Rose, Instruments lists Autopilot's output first, then its own and VHF's. In our fork `ownLoads` in `lib/fork-mapping.js` drops any load that is another circuit's only output; what is left is the circuit's own (`ownOutputs`), and a circuit left with nothing is a group (SugarShack "All Lights On"). We use it for three things: the webapp label (own loads only, numbered from 1 as the Configuration Tool does, so Buzzer "ch 6" and Light 5 "ch 5"; the other loads go in the hover text, and a group shows nothing, like a Mode), circuit current, and the inferred state of item 1 (Instruments was reading Autopilot's bit).
 - **Logging cost.** `log()` builds its message even when debug is off. One 65284 status frame on Compass Rose produces about 25 messages (2.4 KB of strings), a few times a second. Cheap, but constant on a Cerbo; a debug-enabled check before building the string would remove it.
 - **Every bus frame is fully parsed** by `parseRawLine` before its PGN is looked at (our monitor's own listener does the same; that goes in our clean-up). About 1 µs per frame on a desktop. Reading the PGN from the CAN id first would skip the data parsing for everything that is not CZone.
 - **For information, not yours:**

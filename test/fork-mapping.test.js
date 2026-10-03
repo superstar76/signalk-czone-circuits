@@ -50,7 +50,15 @@ function run (fixture) {
   assert.strictEqual(c.Lights.statusConfidence, 'inferred-no-status-table')
   const on = Object.values(c).filter(x => x.state && x.state.state === 'ON').map(x => x.name).sort()
   // (Freezer / Fridge Temp Control are on too, but are not on any display.)
-  assert.deepStrictEqual(on, ['Anchor Light', 'Freezer', 'Fresh Water Pump', 'Lights', 'Toilet', 'VHF'])
+  // Instruments lists Autopilot's output (module 1 channel 0) first, then its
+  // own (module 2 channel 11) and VHF's. Its state is its own load: on here,
+  // with the autopilot off. Read from the first load listed it showed OFF.
+  assert.deepStrictEqual(c.Instruments.ownOutputs, [{ module: 2, channel: 11 }])
+  assert.deepStrictEqual(c.Instruments.alsoDrives, ['Autopilot', 'VHF'])
+  assert.strictEqual(c.Instruments.statusModule, 2)
+  assert.strictEqual(c.Instruments.statusBit, 11)
+  assert.strictEqual(c.Autopilot.state.state, 'OFF')
+  assert.deepStrictEqual(on, ['Anchor Light', 'Freezer', 'Fresh Water Pump', 'Instruments', 'Lights', 'Toilet', 'VHF'])
   assert.strictEqual(c['Nav Lights'].state.state, 'OFF')
   // Display switches Lights off: bit 4 of module 02 clears.
   raw('1CFF0402', '27 99 02 36 23 0E 01 00')
@@ -224,6 +232,45 @@ function run (fixture) {
   const published = deltas.flatMap(d => d.updates.flatMap(u => u.values.map(v => v.path)))
   assert(published.includes('electrical.czone.Freezer_Temp_Control.switch.state'))
   plugin.stop()
+}
+
+// --- A circuit's own loads: how it is wired, not everything it switches.
+{
+  const { ownLoads } = require('../lib/fork-mapping')
+  const { buildCatalog } = require('../lib/monitor/catalog')
+  const load = f => { const m = zcf.load(path.join(__dirname, 'fixtures', f)); prepareMapping(m, { showVirtualCircuits: true, showNonDisplayCircuits: true }); return m }
+  const by = m => Object.fromEntries(m.circuits.map(c => [c.name.trim(), c]))
+
+  // Bench: Light 5 lists the Buzzer's DC6 (channel 5) first, then its own DC5.
+  const bench = by(load('TestBench-2026-10-01.zcf'))
+  assert.deepStrictEqual(bench['Light 5'].ownOutputs, [{ module: 1, channel: 4 }])
+  assert.deepStrictEqual(bench['Light 5'].alsoDrives, ['Buzzer'])
+  assert.deepStrictEqual(bench.Buzzer.ownOutputs, [{ module: 1, channel: 5 }])
+  assert.deepStrictEqual(bench.Buzzer.alsoDrives, [])
+  assert.strictEqual(bench['Light 5'].statusBit, 4) // the status table already said so
+  // Its current is its lamp, not lamp plus buzzer.
+  const items = buildCatalog(fs.readFileSync(path.join(__dirname, 'fixtures', 'TestBench-2026-10-01.zcf'))).items
+  assert.deepStrictEqual(items.find(i => i.group === 'Circuit current' && i.name === 'Light 5').outputs, [{ module: 1, channel: 4 }])
+  assert.deepStrictEqual(items.find(i => i.group === 'Circuit current' && i.name === 'Buzzer').outputs, [{ module: 1, channel: 5 }])
+
+  // Two loads of its own stay two (Compass Rose Fresh Water Pump); a virtual
+  // switch is not a load (Freezer: channel 2 and VS 1).
+  const cr = by(load('Compass-Rose-03.10.26.zcf'))
+  assert.deepStrictEqual(cr['Fresh Water Pump'].ownOutputs, [{ module: 1, channel: 3 }, { module: 2, channel: 10 }])
+  assert.deepStrictEqual(cr.Freezer.ownOutputs, [{ module: 1, channel: 2 }])
+  // Seven loads of its own (Persevere Lighting).
+  assert.strictEqual(by(load('Persevere-14.07.25.zcf')).Lighting.ownOutputs.length, 7)
+  // A group owns nothing (SugarShack All Lights On), and keeps all its loads for current.
+  const ss = by(load('SugarShack-20260927-01.zcf'))
+  assert.deepStrictEqual(ss['All Lights On'].ownOutputs, [])
+  assert.strictEqual(ss['All Lights On'].alsoDrives.length, 13)
+  assert.deepStrictEqual(ss['Anchor Light'].ownOutputs, [{ module: 28, channel: 1 }])
+  // Plain lists work too (the monitor's circuit list).
+  const a = { name: 'A', outputs: [{ module: 1, channel: 0 }] }
+  const b = { name: 'B', outputs: [{ module: 1, channel: 0 }, { module: 1, channel: 1 }] }
+  const got = ownLoads([a, b], c => c.outputs)
+  assert.deepStrictEqual(got.get(b), { own: [{ module: 1, channel: 1 }], alsoDrives: ['A'] })
+  assert.deepStrictEqual(got.get(a), { own: [{ module: 1, channel: 0 }], alsoDrives: [] })
 }
 
 console.log('Fork mapping tests passed')

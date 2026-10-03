@@ -245,6 +245,31 @@
   const percentOf = c => c.state && Number.isFinite(c.state.percent) ? c.state.percent : null;
   // [fork] The category list follows the view: on AC only the categories AC
   // circuits are in, on In Use only those of circuits that are on, and so on.
+  // [fork] The circuit's own load(s), numbered from 1 as the CZone
+  // Configuration Tool does (DC1 = ch 1). A circuit can also switch another
+  // circuit's load (bench: Light 5 is DC5 and also drives the Buzzer's DC6);
+  // that is not how it is wired, so it goes in the hover text, not the label.
+  // A circuit that owns no load is a group (SugarShack All Lights On) and
+  // shows nothing, like a Mode. Channels 32 and up are virtual switches (VS 1 = 32).
+  const outputLabel = c => {
+    const own = Array.isArray(c.ownOutputs) ? c.ownOutputs : null;
+    const all = c.zcf && Array.isArray(c.zcf.outputs) && c.zcf.outputs.length ? c.zcf.outputs : [{ module: c.module, channel: c.channel }];
+    if (own && !own.length && (c.alsoDrives || []).length) return ''; // a group: no wiring of its own to show, like a Mode
+    const byModule = new Map();
+    for (const o of (own && own.length ? own : all)) {
+      if (!Number.isInteger(o.channel) || !Number.isInteger(o.module)) continue;
+      if (!byModule.has(o.module)) byModule.set(o.module, new Set());
+      byModule.get(o.module).add(o.channel);
+    }
+    const parts = [...byModule].map(([m, set]) => {
+      const chs = [...set].sort((x, y) => x - y);
+      const real = chs.filter(ch => ch < 32).map(ch => ch + 1), virt = chs.filter(ch => ch >= 32).map(ch => ch - 31);
+      const names = [real.length ? `ch ${real.join(' + ')}` : '', virt.length ? `VS ${virt.join(' + ')}` : ''].filter(Boolean).join(' + ');
+      return `module ${m.toString(16).padStart(2,'0').toUpperCase()} / ${names}`;
+    });
+    return parts.join(', ');
+  };
+  const alsoDrives = c => (c.alsoDrives || []).length ? `Also switches: ${c.alsoDrives.join(', ')}` : '';
   const inView = c => !(view==='inuse' && !stateOf(c)) && !(view==='favorites' && !favorites.has(nameKey(c))) && !(view==='ac' && c.masterCategory!=='AC') && !(view==='dc' && c.masterCategory!=='DC');
   const scoped = () => circuits.filter(inView);
   const catList = () => [...new Set(scoped().flatMap(c => c.subCategories || []))].sort((a,b) => a.localeCompare(b));
@@ -320,7 +345,7 @@
     const toggle = `<button type="button" class="toggle ${on?'on':'off'} ${disabled?'pending':''}" ${disabled?'disabled':''} aria-busy="${disabled?'true':'false'}" aria-label="Turn ${on?'off':'on'} ${esc(c.name)}" onclick="toggleCircuit('${encodeURIComponent(c.name)}',${!on})">${disabled?'Sending…':(on?`ON${typeof c.current === 'number' ? `<small class="toggle-amps">${c.current.toFixed(1)} A</small>` : ''}`:'OFF')}</button>`;
     const control = dim ? `<div class="control"><div class="range-wrap"><input aria-label="${esc(c.name)} brightness" type="range" min="1" max="100" value="${Math.max(1,Math.round(pct ?? 100))}" oninput="previewPercent(this)" onchange="setLevel('${encodeURIComponent(c.name)}',this.value)"><span class="percent">${pct == null ? '—' : Math.round(pct)+'%'}</span></div>${toggle}</div>` : `<div class="control">${toggle}</div>`;
     const sending = p ? `<span class="sending">Sending…</span>` : '';
-    return `<div class="circuit"><button class="fav ${fav?'on':''}" title="${fav?'Remove from':'Add to'} favorites" onclick="toggleFavorite('${esc(nameKey(c)).replace(/'/g,"\\'")}')">${fav?'★':'☆'}</button><div class="circuit-name">${typeof c.temperature === 'number' ? `<strong class="with-chip"><span>${esc(c.name)}</span>${tempChip(c)}</strong>` : `<strong>${esc(c.name)}</strong>`}<small>${esc(c.masterCategory || 'CZone')} · module ${Number(c.module).toString(16).padStart(2,'0').toUpperCase()} / ch ${c.channel}</small></div><div class="tags"><span class="tag">${esc(c.masterCategory || 'CZone')}</span>${cats}</div><div><div class="status ${on?'on':''}"><span class="status-dot"></span>${on?'ON':'OFF'} ${sending}</div>${control}</div><button type="button" class="arrow trend-arrow" title="Current trend" aria-label="${esc(c.name)} current trend" onclick="window.czoneMonitor && window.czoneMonitor.trendPath('electrical.czone.${esc(c.slug)}.current')">›</button></div>`;
+    return `<div class="circuit"><button class="fav ${fav?'on':''}" title="${fav?'Remove from':'Add to'} favorites" onclick="toggleFavorite('${esc(nameKey(c)).replace(/'/g,"\\'")}')">${fav?'★':'☆'}</button><div class="circuit-name">${typeof c.temperature === 'number' ? `<strong class="with-chip"><span>${esc(c.name)}</span>${tempChip(c)}</strong>` : `<strong>${esc(c.name)}</strong>`}<small title="${esc(alsoDrives(c))}">${esc(c.masterCategory || 'CZone')}${outputLabel(c) ? ' · ' + esc(outputLabel(c)) : ''}</small></div><div class="tags"><span class="tag">${esc(c.masterCategory || 'CZone')}</span>${cats}</div><div><div class="status ${on?'on':''}"><span class="status-dot"></span>${on?'ON':'OFF'} ${sending}</div>${control}</div><button type="button" class="arrow trend-arrow" title="Current trend" aria-label="${esc(c.name)} current trend" onclick="window.czoneMonitor && window.czoneMonitor.trendPath('electrical.czone.${esc(c.slug)}.current')">›</button></div>`;
   }
 
   // [fork] The temperature that belongs to a circuit (an input named

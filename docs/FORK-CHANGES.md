@@ -220,7 +220,7 @@ Changes to Matt's files:
 | File | Lines | Change |
 |---|---|---|
 | `index.js` | +92, −4 | Create, start and stop the monitor; hand the switch pane the send functions and the decoded state; one call after `zcf.load()` to `fork-mapping`; `current`, `temperature` and `notShown` on `/circuits`; eight settings |
-| `public/index.html` | +63, −11 | Monitoring tab; amps under ON; trend arrow; temperature chip; category list that follows the tab; icons for the new categories |
+| `public/index.html` | +63, −11 | Monitoring tab; amps under ON; trend arrow; temperature chip; category list that follows the tab; icons for the new categories; circuit label shows the circuit's own load, numbered as the Configuration Tool does |
 | `public/remoteEntry.js` | +101 | Controls for the eight settings; saved confirmation |
 | `package.json` | +4, −1 | `dbus-native` dependency; the new tests in `npm test` |
 
