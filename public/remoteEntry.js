@@ -31,6 +31,9 @@ var signalk_czone_circuits = (function () {
     var uploadState = React.useState(null)
     var uploadFile = uploadState[0]
     var setUploadFile = uploadState[1]
+    var savedState = React.useState(0)
+    var savedAt = savedState[0]
+    var setSavedAt = savedState[1]
 
     function loadConfiguration () {
       return fetch('/plugins/signalk-czone-circuits/configuration', { credentials: 'same-origin', cache: 'no-store' })
@@ -49,6 +52,12 @@ var signalk_czone_circuits = (function () {
     }, [])
 
     React.useEffect(function () {
+      if (!savedAt) return undefined
+      var timer = setTimeout(function () { setSavedAt(0) }, 4000)
+      return function () { clearTimeout(timer) }
+    }, [savedAt])
+
+    React.useEffect(function () {
       if (!read || read.status !== 'reading') return undefined
       var timer = setInterval(function () {
         loadConfiguration().catch(function () {})
@@ -56,11 +65,15 @@ var signalk_czone_circuits = (function () {
       return function () { clearInterval(timer) }
     }, [read && read.status])
 
+    // Every control saves as it is changed: Signal K stores the settings and
+    // restarts the plugin with them. There is no Save button, so say so each
+    // time (Signal K shows its own alert if the save fails).
     function persist(next) {
       setBusy(true); setError('')
       try {
         save(Object.assign({}, configuration, next))
         setData(Object.assign({}, data || {}, next))
+        setSavedAt(Date.now())
       } catch (err) {
         setError(err.message || String(err))
       } finally {
@@ -197,7 +210,11 @@ var signalk_czone_circuits = (function () {
     var reading = read && read.status === 'reading'
 
     return React.createElement('div', null,
+      savedAt ? React.createElement('div', { role: 'status', style: { position: 'fixed', top: 20, right: 20, zIndex: 9999, maxWidth: 320 } },
+        React.createElement('div', { className: 'alert alert-success mb-0', style: { boxShadow: '0 4px 12px rgba(0,0,0,0.3)' } }, '\u2713 Saved. The plugin has restarted with the new settings.')
+      ) : null,
       React.createElement('h4', null, 'CZone Circuits Configuration'),
+      React.createElement('div', { style: { marginBottom: 12, fontSize: 12 } }, 'Changes on this page are saved as you make them; there is no Save button.'),
       React.createElement('p', null, 'Configuration is loaded locally at Signal K startup. Reading from the CZone network is an explicit maintenance action and is never performed automatically at startup.'),
 
       React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
