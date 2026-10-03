@@ -1,22 +1,23 @@
 # signalk-czone-circuits: the monitoring fork
 
-What the fork adds to Matt Mitchell's plugin and what it changes, as of 3 October 2026.
+What the fork adds to Matt Mitchell's plugin and what it changes, as of 4 October 2026.
 
 **Fork:** `github.com/superstar76/signalk-czone-circuits`, branch `monitoring`
 **Based on:** Matt Mitchell's `signalk-czone-circuits`, `main` at `45c47d1` (beta.20), merged in with no conflicts. His beta.22 restructure is not merged yet.
-**State:** 3 October 2026
-**Run on:** the CZone test bench and Compass Rose, both on a Cerbo GX with Venus OS 3.80 and Signal K 2.27
-**Size:** about 4,100 lines of new code in 14 new files, 1,800 lines of new tests in 9 new test files, and about 260 lines changed in four of Matt's files
+**State:** 4 October 2026
+**Run on:** the CZone test bench and Compass Rose, both on a Cerbo GX with Venus OS 3.80 and Signal K 2.27, and both reachable remotely over Tailscale
+**Size:** about 4,300 lines of new code in 15 new files (and two small shell scripts), 2,000 lines of new tests in 10 new test files, and about 430 lines added to four of Matt's files
 
 ## Summary
 
-Matt's plugin reads a CZone configuration file (ZCF), lists the circuits in a webapp and switches them over NMEA 2000. The fork keeps all of that and adds five things, all driven by the same ZCF with nothing set up by hand:
+Matt's plugin reads a CZone configuration file (ZCF), lists the circuits in a webapp and switches them over NMEA 2000. The fork keeps all of that and adds six things, all driven by the same ZCF with nothing set up by hand:
 
 - **Monitoring:** every meter and sender in the CZone configuration, live, in a Monitoring tab.
 - **Trends:** history for every monitored value and every circuit's current, kept on an SD card.
 - **Circuit current and temperature:** amps per circuit, and the temperature that belongs to a circuit, shown with the circuit.
 - **Victron switch pane:** the CZone circuits as switches on the GX touch screen, Remote Console and VRM.
 - **A truer circuit list:** state on boats whose ZCF has no status table, every category named, and circuits that no CZone display would list left out.
+- **On the chartplotter:** the webapp as a tile on a B&G / Simrad / Lowrance plotter, with a layout for its touch screen.
 
 The rule throughout: once the ZCF is uploaded, the data should appear. Where the bus is ambiguous (several devices on one instance), the ZCF decides.
 
@@ -39,6 +40,7 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
 - **Grouping:** a DC meter goes under its DC Type from the Configuration Tool, so a solar meter is under Solar and not under Batteries.
 - **Live or not:** each row says LIVE or NOT ON BUS. A row that is not on the bus names the NMEA 2000 instance the ZCF expects ("Nothing is sending instance 3 on NMEA 2000"), which is the number to set on the sending device.
 - **Looks:** built from the webapp's own classes, so it matches the circuit list. Group colours are CSS variables.
+- **No false readings:** NMEA 2000 marks a field as "not available", "out of range" or "reserved" with its top values. None of them is shown as a reading; the last good value stays.
 
 ### 1.2 Trends
 
@@ -53,7 +55,10 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
 
 - **Retention:** kept until storage runs low. Then the oldest full-detail days go first and summaries last, so recording never stops. An optional setting caps full detail at 31, 90 or 365 days.
 - **Where:** on a Victron GX, an SD card or USB stick only, never internal flash; with no card, nothing is written or held in memory. On other systems, the Signal K data folder. A "Trend folder" setting overrides both. Minimum card: 16 GB.
-- **One manual step on a GX:** Venus OS mounts a FAT card writable by root only, and Signal K runs as the `signalk` user, so a new card shows "Card found but not writable". The card has to be mounted with `umask=0000`; FAT only takes that at mount time, and the VRM logger holds the card, so `docs/venus-sdcard-rw.sh` stops the logger, remounts and restarts it. Copy it to `/data/sdcard-rw.sh` and add `/data/sdcard-rw.sh &` to `/data/rc.local`. The plugin cannot do this itself because it does not run as root.
+- **One file on the card for a GX, and no login.** Venus OS mounts a FAT card writable by root only, and Signal K runs as the `signalk` user, so the plugin can see a new card but not write to it. The plugin cannot change that itself. Venus OS, though, unpacks a file called `venus-data.tgz` from a card at boot and runs a hook from it. So when a card is found but not writable, the Monitoring tab says so and gives three steps: download `venus-data.tgz` from the link there, copy it onto the card with a computer, restart the GX. From then on the GX opens the card for Signal K at every start, including after a firmware update. Nobody has to log in to the GX.
+  - **What the file does:** puts `sdcard-rw.sh` in `/data` and adds one line to `/data/rc.local` to run it at boot. The script mounts each FAT card or stick again with open permissions, stopping the VRM logger for the moment that takes, and does nothing when the card is already open.
+  - **How far it is tested:** the archive, both scripts and the download are covered by `npm test` (the scripts in a dry run against mount tables copied from the bench). The original, simpler script was pasted in by hand on the bench Cerbo and works there. The file-on-the-card route itself has not yet been run on a GX.
+  - **With no card at all** the pill says "No SD card or USB stick: trends off".
 - **Chart:** an in-page panel with 1 h, 24 h, 7 d, 31 d, 90 d, 1 y or a custom from/to period; now/min/avg/max; a hover crosshair; gaps where data is missing. Periods over 48 hours draw the average with a min–max band, so short spikes stay visible.
 - **Several values on one chart:** "Add value" puts any other trended value on the chart, up to five. Each unit gets its own scale; "Stacked" shows one plot per unit on the same time axis.
 - **Earlier history:** data already on the card from the February plugin is read in place. Old folder names are matched automatically where possible; others are mapped in `aliases.json` in the trend folder. Compass Rose's history back to late September is readable this way.
@@ -71,6 +76,7 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
   | 130825 | Control X PLUS (a bit-packed form of the same table; needs no CZone display on the network) |
 
 - **Off reads 0 A:** an output whose level says off reads 0 A, where the module otherwise reports a constant 0.1 A.
+- **A circuit's own loads only:** where a circuit also switches another circuit's load, that load's current stays with the circuit it belongs to (see 1.6).
 
 ### 1.4 Circuit temperature
 
@@ -98,12 +104,34 @@ An opt-in setting registers the circuits with the GX as `com.victronenergy.switc
 - **Virtual-switch circuits hidden.** A circuit that only drives virtual switches is not a circuit anyone switches.
 - **Circuits not on any CZone display hidden.** A circuit with no display among its Circuit Controls (thermostat feeds, "pump running" indicators, alarm relays) is left out of the webapp and the pane, as it is on a CZone display. Its state still goes to Signal K.
 - **One group where only one fits.** A circuit ticked in several categories is listed under each in the webapp, as on a CZone display. The Victron pane allows one group, so it takes the first in a fixed order: the owner's own categories, then Indicators and Alarms, Navigation, Refrigeration, Bilge Pumps, Pumps, Lighting and so on.
+- **A circuit's own load.** A circuit's load list in the ZCF can include loads that belong to other circuits: on the bench, Light 5 lists the Buzzer's output ahead of its own; on Compass Rose, Instruments lists Autopilot's and VHF's. A load is treated as another circuit's when it is that circuit's only output. What is left is the circuit's own, and it decides three things:
+
+  | Use | Before | Now |
+  |---|---|---|
+  | Label under the name | first load listed, counted from 0 (Light 5 and Buzzer both "ch 5") | the circuit's own load, counted from 1 as the Configuration Tool does (Light 5 "ch 5", Buzzer "ch 6") |
+  | Current | every load the circuit switches | its own loads |
+  | State with no status table | the first load listed (Instruments followed the autopilot) | its own load |
+
+  The other circuits it switches are in the hover text ("Also switches: Buzzer"). A circuit that owns no load at all (SugarShack's All Lights On, Welcome Home) is a group and shows no load, like a Mode.
+- **Not logged in is said plainly.** When Signal K refuses the plugin's data, the page says "Not logged in to Signal K" and links to the login, instead of showing an empty list under "Connected". A login is kept per address, so `venus.local` and the IP address each need their own.
 - **The category list follows the tab.** On AC, DC, In Use or Favorites, only the categories of the circuits in that tab are listed, with counts for that tab. A category narrows the tab; a second click clears it. On Monitoring the list is the monitoring groups.
 
 ### 1.7 Settings page
 
 - **Saves as you go:** the page now says so, and confirms each save.
 - **New settings:** see section 4.
+
+### 1.8 Chartplotter view
+
+A Navico plotter (B&G, Simrad, Lowrance) on the same Ethernet network as Signal K can show the webapp as a tile. The plotter's browser is Chromium 69 and cannot run Signal K's pages as they are, so the tile comes from another plugin, `signalk-navico-embedder`, which converts pages on the way through and supplies the login token.
+
+- **Layout:** the page recognises the plotter (the plotter's own parameters on the address, or the embedder's token) and switches to a touch layout: larger rows and buttons, no banner, the category and status chips dropped, drawn icons in place of symbol characters the plotter's fonts lack. A desktop browser never sees it; `?layout=mfd` shows it for testing.
+- **Scrolling:** the plotter's touch arrives as mouse events, so a drag selected text and nothing scrolled. The page now scrolls the list or the left column on a drag, and the release is not taken as a tap.
+- **Compatibility:** the page's own script avoids syntax newer than that browser (the embedder converts separate script files but not the code inside a page).
+- **Tested** on Compass Rose (Simrad NSS evo3S): the tile appears, the page loads with live state, and circuits switch from the plotter. The touch layout and drag scrolling were built after that test and checked against a real Chromium 69 build, driven by a simulated mouse; they have not yet been seen on the plotter.
+- **Not done yet:** the plotter's day and night mode is not followed, and the trend panel's few remaining symbol characters have not been checked on the plotter.
+- **Setting it up:** the plotter and the Signal K machine must be on the same network segment. In the embedder: the IP override set to that machine's wired address, the CZone Circuits app enabled, and an admin token (the plugin's own interface needs a login). On Compass Rose the embedder's own "Generate" button did not deliver a token; one made with `signalk-generate-token` and written into the embedder's settings did. Restrict the embedder's client list to the plotter's address, since the token carries admin rights.
+- **The built-in Signal K tile is not this.** A GX running Venus OS Large advertises a Signal K tile to the plotter by itself, but it opens Signal K's admin page, which that browser cannot draw (a white screen on Signal K 2.27).
 
 ## 2. How readings are found with nothing configured
 
@@ -140,6 +168,9 @@ These are in the brief for Matt, with evidence, for his parser.
 | Display controls | Control module 0 is "All Display Interfaces"; module type 16 is a display or chartplotter, 17 the Wireless Interface |
 | No status table | On those configurations the 65284 bitmap is the module's output channels |
 | Control X PLUS | Current and level are in PGN 130825, 22-bit records, not 130822 |
+| Load lists | A circuit's first load can be another circuit's; the parser's module/channel is that first load |
+| Circuits with no controls | Some circuits have no Circuit Controls at all and are switched only as loads of another circuit (SugarShack's four solar chargers under SSB Operation) |
+| Reserved values | The top three values of a numeric NMEA 2000 field mean no data; a bridge on the bench sends AC power as "out of range" from time to time |
 
 ## 4. Settings added
 
@@ -175,6 +206,7 @@ All under `/plugins/signalk-czone-circuits`.
 | `/monitor/debug?path=` | everything the plugin sees for one path |
 | `/monitor/values` | current value of every trended series |
 | `/trend/status` | where trends are stored, free space, sample rate |
+| `/trend/card-setup` | downloads `venus-data.tgz`, the card setup file for a GX |
 | `/trend?path=&range=` | a series' data |
 | `/victron/status` | the switch pane: circuits it has as on, any that disagree with the plugin, the GX's unit setting, recent requests |
 
@@ -191,6 +223,13 @@ All under `/plugins/signalk-czone-circuits`.
 | Switches changed place in the pane when turned on | The current suffix changed the alphabetical order | Suffix written as "(1.5 A)" |
 | Device name on the GX would not hold | The plugin refused the edit | Edit accepted and kept |
 | Bilge pumps under "DC" | Bilge Pumps category not located | Found and named |
+| AC output power read 4294967294 W at times (bench) | The "out of range" marker was shown as a reading | Marker and reserved values dropped in every decoder |
+| Light 5 and Buzzer both "ch 5" (bench) | The label was the first load listed, counted from 0 | The circuit's own load, counted from 1 |
+| Instruments would follow the autopilot (Compass Rose) | Its state was read from the first load listed, which is Autopilot's | State from its own load |
+| "SD card read-only" with a good card | The card was found but the `signalk` user could not write to it, and fixing that needed a login to the GX | Says "Card found but not writable" and offers a setup file to copy onto the card; no login |
+| Empty circuit list under "Connected" | Signal K refused the plugin's data (no login at that address) and the page did not say so | Page says "Not logged in to Signal K" with a link |
+| White screen from the plotter's Signal K tile | It opens Signal K's admin page, too modern for the plotter's browser | Our webapp served through `signalk-navico-embedder`; page script kept within that browser's syntax |
+| Could not scroll on the plotter; a drag selected text | The plotter's touch arrives as mouse events | Drag-to-scroll and no text selection in the plotter layout |
 
 ## 8. Files
 
@@ -203,16 +242,19 @@ lib/monitor/currents.js   CZone output tables -> circuit current
 lib/monitor/sensors.js    standard meter and sender PGN decoding
 lib/monitor/fastpacket.js fast-packet reassembly
 lib/monitor/storage.js    trend storage: two tiers, write-on-change, space guard
+lib/monitor/venus-card.js builds venus-data.tgz, the card setup file for a GX
+lib/monitor/venus/        the two scripts that go in it
 lib/monitor/wire.js       candump listener for third-party devices
 lib/victron/vedbus.js     minimal Victron D-Bus service
 lib/victron/switches.js   CZone circuits as GX switchable outputs
-lib/fork-mapping.js       state fallback, categories and groups, hidden circuits
+lib/fork-mapping.js       state fallback, categories and groups, hidden circuits, a circuit's own loads
 lib/zcf-circuits.js       structural circuit parser (with the hidden-duplicate rule)
 lib/zcf-monitor.js        meters, meter settings, inputs
 public/monitor.js         Monitoring tab and trend panel
 public/monitor.css
 docs/ZCF-FORMAT.md        layouts, checked across the sample ZCFs
-test/                     9 new test files, 2 new ZCF fixtures
+docs/venus-sdcard-rw.sh   a copy of the card script, for reading
+test/                     10 new test files, 2 new ZCF fixtures
 ```
 
 Changes to Matt's files:
@@ -220,13 +262,15 @@ Changes to Matt's files:
 | File | Lines | Change |
 |---|---|---|
 | `index.js` | +92, −4 | Create, start and stop the monitor; hand the switch pane the send functions and the decoded state; one call after `zcf.load()` to `fork-mapping`; `current`, `temperature` and `notShown` on `/circuits`; eight settings |
-| `public/index.html` | +63, −11 | Monitoring tab; amps under ON; trend arrow; temperature chip; category list that follows the tab; icons for the new categories; circuit label shows the circuit's own load, numbered as the Configuration Tool does |
+| `public/index.html` | +235, −16 | Monitoring tab; amps under ON; trend arrow; temperature chip; category list that follows the tab; icons for the new categories; circuit label shows the circuit's own load, numbered as the Configuration Tool does; "not logged in" message; chartplotter layout (styles, drawn icons, drag-to-scroll), which is about 150 of the added lines |
 | `public/remoteEntry.js` | +101 | Controls for the eight settings; saved confirmation |
 | `package.json` | +4, −1 | `dbus-native` dependency; the new tests in `npm test` |
 
 ## 9. Tests
 
-`npm test` runs Matt's suite and the fork's, 21 files, all passing. The fork's tests use frames captured on the bench and on Compass Rose, and eight sample ZCFs (two bench, two Compass Rose, Meitaki, Persevere, Sel Citron, SugarShack).
+`npm test` runs Matt's suite and the fork's, 22 files, all passing. The fork's tests use frames captured on the bench and on Compass Rose, and eight sample ZCFs (two bench, two Compass Rose, Meitaki, Persevere, Sel Citron, SugarShack).
+
+The webapp pages are not covered by `npm test`. They were checked by hand in a current Chromium and, for the chartplotter layout, in Chromium 69.0.3494, the version the plotter runs: layout, drag scrolling of the list and of the left column, a drag from a button not switching it, a tap switching it, and the desktop page unchanged.
 
 ## 10. What has been confirmed where
 
@@ -242,12 +286,20 @@ Changes to Matt's files:
 | AC from 127503 / 127504 | does not apply | yes |
 | Categories, hidden circuits, category list | not re-checked | yes |
 | Temperature in the label and webapp | not re-checked | yes (Freezer and Fridge) |
+| Monitoring groups by DC type | yes | yes |
+| No false AC power reading | fix not yet confirmed there | does not apply |
+| Label shows the circuit's own load | not yet confirmed there | yes |
+| Instruments state from its own load | does not apply | installed; not yet confirmed against the boat |
+| Chartplotter tile (loads, live state, switching) | no plotter | yes (NSS evo3S) |
+| Chartplotter touch layout and drag scrolling | no plotter | built and tested in Chromium 69; not yet installed |
 
-The bench had the builds of 3 October installed that evening; rows marked "not re-checked" are still to be confirmed there.
+The bench was updated on the evening of 3 October; rows marked "not re-checked" or "not yet confirmed" are still to be checked there. Both Cerbos have Tailscale, so either can be reached from the other site.
 
 ## 11. Load on the Cerbo
 
 Measured on Compass Rose, plugin off against plugin on: Signal K at about 41 % and 45 % CPU, a difference smaller than the swing within either run. Idle stayed near 25 % and the load average near 4 both ways. The Cerbo is close to its limit with Signal K, Node-RED and the other apps; the plugin adds nothing measurable. A Cerbo GX MK3 is the comfortable choice for that kind of installation. The plugin has not been run on one.
+
+The chartplotter view adds a second plugin, `signalk-navico-embedder`, which converts pages on the Cerbo as the plotter asks for them. After it was installed on Compass Rose, one Signal K start took about five minutes and saving its settings took minutes to take effect. Whether that repeats has not been measured.
 
 ## 12. Limits and open items
 
@@ -259,7 +311,14 @@ Measured on Compass Rose, plugin off against plugin on: Signal K at about 41 % a
 - **The GX unit setting** reads empty on Compass Rose and is treated as °C. What it reads when set to Fahrenheit has not been seen.
 - **Compass Rose:** the Victron DC instances were renumbered on 3 October (Start Battery 2, Alternator 4, Solar 7) and the Fridge temperature tag corrected, so each meter now has its own instance. House Battery (instance 0) is still sent by several devices; the plugin takes the BMS.
 - **Signal K 2.27 admin page:** a plugin's settings sometimes will not reopen without a page refresh. This is a Signal K fault, fixed in 2.33.
-- **Parked from the bench:** units from the ZCF, RGB circuits, a Node-RED palette, the occasional current drop-out.
+- **Trends with no card.** On a GX, trends are off until there is a card, and the card needs the setup file. Keeping a short history on the GX's own storage, with a strict size limit, would make trends work with nothing at all; it was ruled out earlier to spare the internal flash. Open for a decision.
+- **The card setup file** needs one run on a real GX (the bench) before it is relied on.
+- **Which circuits to hide is not settled.** Today a circuit with no display among its controls is hidden. Matt wants his four solar-charger circuits shown; they have no controls at all. Two ways forward: he adds "All Display Interfaces" to them, or the rule becomes "hide when there are controls and none is a display; show when there are none". The second also brings back Meitaki's Audible Alarm, Cabin Fans and Cockpit USB and Sel Citron's Salon Air Conditioner. Waiting on Matt.
+- **State of a group circuit.** SugarShack's Timed Port and Timed Stbd Water Heater share a status bit with the plain water heaters, so each pair shows on and off together. "On only when every load it drives is on" would separate them; not built, and it needs SugarShack to test.
+- **Instruments on Compass Rose** now reads its own load. To be confirmed against what is physically on.
+- **Chartplotter layout** is to be installed and tried on the plotter. Day and night mode and the trend panel's symbols are still to do.
+- **Compass Rose network.** The plotter sat behind the PredictWind DataHub Pro, on a different network from the Cerbo, so no tile could reach it. For the test the Cerbo's cable was moved to the DataHub, which left the Cerbo on two networks and made `venus.local` unreliable from the laptop. A Teltonika TSW010 switch is to go on the RUT200's LAN port with the Cerbo and the plotter on it; then the embedder's IP override changes to the Cerbo's wired address, the plotter's address goes on the embedder's client list, and the Cerbo's Wi-Fi goes off.
+- **Parked from the bench:** units from the ZCF, RGB circuits (an RGBW light is on order; it needs a Control X PLUS and a capture while the colour is changed), a Node-RED palette, the occasional current drop-out.
 
 ## 13. Before opening the pull request
 
@@ -267,4 +326,6 @@ Measured on Compass Rose, plugin off against plugin on: Signal K at about 41 % a
 - [ ] Merge Matt's latest `main` and do the clean-up pass.
 - [ ] If his parser has the hidden-duplicate rule, use it and drop `lib/zcf-circuits.js`.
 - [ ] Remove the two leftover `status-fallback` files on GitHub.
+- [ ] Settle the hide rule with Matt.
+- [ ] Decide whether the chartplotter layout goes in the pull request or follows it.
 - [ ] Re-check on the bench and on Compass Rose.

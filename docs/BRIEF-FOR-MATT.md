@@ -2,9 +2,9 @@
 
 **From:** Matthew Duckett (CZone test bench and Compass Rose, both on a Cerbo GX, Venus OS 3.80, Signal K 2.27)
 **Against:** `main` at `2744c45` (beta.22) and `signalk-czone-zcf` at `3f836e7` (beta.1)
-**Date:** 3 October 2026 (replaces the 1 October version)
+**Date:** 4 October 2026 (replaces the 3 October version)
 
-Ordered by impact. Each item has evidence and a suggested fix. None of these need our fork; they're all in your code. Every item was re-checked against the commits above on 3 October.
+Ordered by impact. Each item has evidence and a suggested fix. None of these need our fork; they're all in your code. Every item was re-checked against the commits above on 3 October. New since the 3 October version: the open question at the end of item 3, and three points in item 9 (a circuit's own load, the not-logged-in page, chartplotters).
 
 ---
 
@@ -94,10 +94,19 @@ Ordered by impact. Each item has evidence and a suggested fix. None of these nee
   | SugarShack | Wireless Relay Button 1 to 4 (their only control is a switch input on COI 04, so the rule already handles the remote), the four "Solar … Charger CHG" |
   | Persevere | six "Bilge Pump Running", Buzzer, Ignition Circuit, Spare 1 to 6, and four more switched only by inputs |
   | Sel Citron | the buzzers, the four keypad "Arch Light … Seq" steps, BMS Warning Light, and five more |
-  | Meitaki | five (three with no controls at all) |
+  | Meitaki | five (four with no controls at all: two Audible Alarm, Cabin Fans, Cockpit USB) |
   | Bench | none |
 
   We keep them in the mapping, so their state still goes to Signal K, and leave them out of the webapp list and the Victron pane (setting "Show circuits that are not on any CZone display", default off). Running on Compass Rose since 3 Oct: the six circuits are gone from both, everything else is unchanged.
+- **Open question, yours to call: circuits with no controls at all.** Your four "Solar … Charger CHG" circuits (both SugarShack files) have real outputs on MBI 01 and no Circuit Controls of any kind; the only thing that switches them is SSB Operation's load list. The rule above hides them, and you want them shown. The circuits Matthew wants hidden are different: each has a control, and it is an input or logic on a module, so something automatic is running it. Two ways to get yours back:
+
+  | Option | Effect |
+  |---|---|
+  | You add "All Display Interfaces" to the four circuits | They show under the rule as it stands; nothing else changes |
+  | The rule becomes "hide when there are controls and none is a display; show when there are none" | Your four come back; so do Meitaki's two Audible Alarm, Cabin Fans and Cockpit USB, and Sel Citron's Salon Air Conditioner. Wireless Relay Button 1 to 4 and everything on Compass Rose and Persevere stay hidden |
+
+  The second is easy to do; the cost is the odd alarm sounder appearing as a switch. We have not changed anything yet.
+- **Your two timed water heaters** (27 September file) are not affected by the hide rule: both have "All Display Interfaces". What you may have seen is their state. Each lists three loads (Inverter/Charger 120V INV, Sink Red Nighttime and the heater's own ACOI output, the last two with a value of 300 in the extended entry), and the parser gives the timed circuit the heater output's status bit (`248:0` / `248:1`, marked `zcf-output-derived`). That is the same bit as the plain Water Heater Port / Stbd circuit, so each pair shows on and off together whichever was switched. "On only when every load it drives is on" would separate them; we have not built it, and it needs your bus to test.
 - **In our fork:** `lib/fork-mapping.js` (`prepareMapping`, called once after `zcf.load()`) names every category, reads the user-defined names, sets `circuit.group`, hides virtual-switch circuits (setting "Show virtual switch circuits", default off) and applies item 1's state fallback. `test/fork-mapping.test.js` covers it on all seven files.
 
 ## 4. `getPgnFromCanId` ignores the data-page bit for standard PGNs
@@ -151,11 +160,13 @@ Only matters if you start using meters (we use them for monitoring in the fork).
 
 ## 9. Smaller points from this week
 
-**New. None is urgent; the first three are changes we made in your files that you may want.**
+**New. None is urgent; the first five are changes we made in your files that you may want.**
 
 - **Settings panel gives no sign that it saved.** Every control saves as it is changed and Signal K restarts the plugin, but nothing says so. In our fork `public/remoteEntry.js` has a line under the heading ("Changes on this page are saved as you make them") and a green "Saved" notice for a few seconds after each change.
 - **Category list in the webapp.** It listed every category on every tab. In our fork `public/index.html` lists only the categories of the circuits in the current tab (AC, DC, In Use, Favorites), with counts for that tab, and a category narrows the tab instead of leaving it; a second click clears it.
 - **A circuit's module/channel is the first load listed, which can be another circuit's.** `parseCircuitRecords` takes `record.outputs[0]`. On the bench, Light 5 lists the Buzzer's output (DC6) ahead of its own (DC5), so Light 5 and Buzzer both read "module 01 / ch 5" in the webapp. On Compass Rose, Instruments lists Autopilot's output first, then its own and VHF's. In our fork `ownLoads` in `lib/fork-mapping.js` drops any load that is another circuit's only output; what is left is the circuit's own (`ownOutputs`), and a circuit left with nothing is a group (SugarShack "All Lights On"). We use it for three things: the webapp label (own loads only, numbered from 1 as the Configuration Tool does, so Buzzer "ch 6" and Light 5 "ch 5"; the other loads go in the hover text, and a group shows nothing, like a Mode), circuit current, and the inferred state of item 1 (Instruments was reading Autopilot's bit).
+- **Not logged in looks like an empty boat.** When Signal K refuses `/plugins/signalk-czone-circuits/circuits` (401), the webapp shows the vessel name, "Connected · WebSocket live" and no circuits or navigation, with nothing to say why. It happens whenever the page is opened at an address the browser has no login for (the IP address instead of `venus.local`, a chartplotter). In our fork the page says "Not logged in to Signal K" and links to the login.
+- **Chartplotters.** The webapp runs as a tile on a Navico plotter (tried on Matthew's Simrad NSS evo3S) through the `signalk-navico-embedder` plugin, which proxies Signal K webapps and converts them for the plotter's Chromium 69. It converts separate script files but not the code inside a page, and `public/index.html` had two `??` in its inline script, so the page loaded and did nothing. In our fork those two are written out longhand, and the page has a plotter layout that only applies there: larger rows and buttons, drawn icons (the plotter's fonts lack most of the symbol characters), no reliance on flex `gap` or `color-mix`, and drag-to-scroll, because the plotter's touch arrives as mouse events and a drag otherwise selects text. Loading, live state and switching are confirmed on the plotter; the layout is tested against a Chromium 69 build and goes on the plotter next. Your SugarShack has B&G plotters, so it may be of use to you. Note the plugin's own API needs a login: the embedder has to be given an admin token.
 - **Logging cost.** `log()` builds its message even when debug is off. One 65284 status frame on Compass Rose produces about 25 messages (2.4 KB of strings), a few times a second. Cheap, but constant on a Cerbo; a debug-enabled check before building the string would remove it.
 - **Every bus frame is fully parsed** by `parseRawLine` before its PGN is looked at (our monitor's own listener does the same; that goes in our clean-up). About 1 µs per frame on a desktop. Reading the PGN from the CAN id first would skip the data parsing for everything that is not CZone.
 - **For information, not yours:**

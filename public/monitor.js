@@ -15,7 +15,8 @@
   }
   const groupOf = item => GROUPS.includes(item.group) ? item.group : 'Other'
   const groupVar = g => `var(--mon-${(GROUP_STYLE[g] || GROUP_STYLE.Other)[1]})`
-  const groupIcon = g => (GROUP_STYLE[g] || GROUP_STYLE.Other)[0]
+  // [fork] drawn icons on a chartplotter, whose fonts lack these symbols
+  const groupIcon = g => window.czoneMfdIcon ? window.czoneMfdIcon(g) : (GROUP_STYLE[g] || GROUP_STYLE.Other)[0]
   const RANGES = [['1h', '1 h'], ['24h', '24 h'], ['7d', '7 d'], ['31d', '31 d'], ['90d', '90 d'], ['1y', '1 y']];
   const RANGE_MS = { '1h': 3600e3, '24h': 86400e3, '7d': 7 * 86400e3, '31d': 31 * 86400e3, '90d': 90 * 86400e3, '1y': 365 * 86400e3 };
   const PREF_KEY = 'signalk-czone-circuits:monitor';
@@ -55,9 +56,17 @@
     section.className = 'section'
     section.id = 'monitorView'
     section.innerHTML = `
-      <div class="section-head"><span>◔</span><div><h2>Monitoring</h2><span class="subtle" id="monCount"></span></div>
+      <div class="section-head"><span class="mon-head-icon">◔</span><div><h2>Monitoring</h2><span class="subtle" id="monCount"></span></div>
         <span class="mon-pill" id="monTrend"><i></i><span>Checking SD card…</span></span>
         <label class="mon-check"><input type="checkbox" id="monShowAll"> Show unmapped</label>
+      </div>
+      <div class="mon-card-fix" id="monCardFix" hidden>
+        <strong>Trends are off: the GX will not let Signal K write to this card yet.</strong>
+        <ol>
+          <li><a href="${API}/trend/card-setup" download="venus-data.tgz">Download venus-data.tgz</a></li>
+          <li>Take the card out, copy the file onto it (not into a folder) with a computer, and put the card back</li>
+          <li>Restart the GX. Trends start by themselves, and keep working after updates</li>
+        </ol>
       </div>
       <div id="monBody"><div class="empty">Loading…</div></div>`
     main.appendChild(section)
@@ -129,6 +138,8 @@
     if (!pill) return
     pill.classList.toggle('ok', !!trend.available)
     pill.title = trend.detail || trend.dir || ''
+    const fix = document.querySelector('#monCardFix')
+    if (fix) fix.hidden = !(trend.available === false && trend.reason === 'write_failed' && trend.mount)
     pill.querySelector('span').textContent = trend.available
       ? `Trending ${trend.trending || 0} values · every ${trend.sampleSeconds || 10} s · ${trend.location !== 'removable' ? 'on disk' : trend.mount && /\/(sd|usb)/.test(trend.mount) ? 'on USB' : 'on SD card'}${typeof trend.freeBytes === 'number' ? ` · ${(trend.freeBytes / 1073741824).toFixed(1)} GB free` : ''}`
       : trend.reason === 'no_sd_card' ? 'No SD card or USB stick: trends off' : trend.reason === 'write_failed' ? 'Card found but not writable: trends off' : 'Trends unavailable'

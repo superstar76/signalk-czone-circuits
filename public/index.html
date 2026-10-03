@@ -186,6 +186,57 @@
       .mode-name > span:first-child { min-width:0; overflow-wrap:anywhere; }
       .mode-name > span:last-child { display:none; }
     }
+
+    /* [fork] Chartplotter layout. A Navico plotter (B&G / Simrad / Lowrance)
+       shows the page in its own browser, Chromium 69, driven by touch that
+       arrives as mouse events. It has no flex gap, no colour-mix, few symbol
+       fonts and no hover; a drag selects text instead of scrolling. The page
+       gets the class "mfd" when the plotter's own parameters are on the address
+       (or ?layout=mfd, for trying it in a desktop browser). Nothing here
+       applies anywhere else. */
+    .mfd, .mfd * { -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+    .mfd input[type=search] { -webkit-user-select:text; user-select:text; }
+    .mfd body { font-size:16px; }
+    .mfd svg.ico { width:22px; height:22px; display:block; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+    .mfd .app { grid-template-columns:230px minmax(0,1fr); }
+    .mfd .hero, .mfd .overview-card, .mfd .rightbar > .right-card:last-child, .mfd #sectionIcon, .mfd .search > span { display:none; }
+    .mfd .modes-card.none { display:none; }
+    .mfd .main { padding:10px 12px 30px; }
+    .mfd .connection { padding:0 4px 8px; }
+    .mfd .sidebar { padding:12px 10px; }
+    .mfd .rightbar { padding:0 10px 14px; }
+    .mfd .brand { padding:2px 8px 12px; }
+    .mfd .brand > * + *, .mfd .category-card > * + * { margin-left:11px; }
+    .mfd .nav button { min-height:50px; font-size:16px; padding:10px 12px; margin-bottom:4px; }
+    .mfd .nav-icon { width:24px; margin-right:12px; flex:none; }
+    .mfd .nav-count { font-size:14px; }
+    .mfd .category-nav .category-card { min-height:60px; margin-bottom:6px; }
+    .mfd .category-nav .category-card strong { font-size:14px; }
+    .mfd .category-nav .category-card span { font-size:12px; }
+    .mfd .cat-icon { background:rgba(120,170,220,.14); }
+    .mfd .section-head { padding:12px 14px; }
+    .mfd .section-head > * + * { margin-left:10px; }
+    .mfd .section-head .search { margin-left:auto; }
+    .mfd .leftwell { background:rgba(5,16,29,.78); border-right:1px solid var(--line); }
+    .mfd .sidebar, .mfd .rightbar { background:none; border:0; }
+    .mfd .section-head h2 { font-size:20px; }
+    .mfd .section-head .subtle { font-size:13px; }
+    .mfd .search input { padding:12px 15px; font-size:15px; }
+    .mfd .section-head .sort { padding:11px 10px; font-size:14px; }
+    .mfd .circuit { grid-template-columns:44px minmax(0,1fr) auto 34px; min-height:74px; padding:10px 12px; }
+    .mfd .tags, .mfd .status { display:none; }
+    .mfd .circuit > div:nth-last-child(2) { justify-self:end; }
+    .mfd .fav { font-size:24px; padding:8px; }
+    .mfd .circuit-name strong { font-size:17px; }
+    .mfd .circuit-name small { font-size:12px; }
+    .mfd .temp-chip { font-size:14px; padding:3px 9px; }
+    .mfd .toggle { min-width:104px; min-height:54px; font-size:17px; }
+    .mfd .toggle-amps { font-size:12px; }
+    .mfd .control > * + *, .mfd .range-wrap > * + * { margin-left:9px; }
+    .mfd .connection > * + * { margin-left:7px; }
+    .mfd .arrow { font-size:26px; padding:8px 4px; }
+    .mfd .mode-button { min-height:50px; font-size:15px; }
+    .mfd .empty { font-size:15px; }
   </style>
   <link rel="stylesheet" href="monitor.css">
 </head>
@@ -227,6 +278,41 @@
   const SK = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/signalk/v1/stream?subscribe=none`;
   const categoryIcons = { Lighting:'💡', Navigation:'◉', Pumps:'♨', Power:'⚡', Entertainment:'♫', 'Fans/Ventilation':'✣', Electronics:'▦', Climate:'❄', Galley:'🍴', 'Deck Equipment':'⚓', Safety:'⬟', Miscellaneous:'•••', Refrigeration:'❆', 'Bilge Pumps':'♨', 'House/Habitat':'⌂', 'Vessel Critical':'⚠', '24-Hour Circuits':'◷', Communications:'☎', Accessories:'✚', 'Indicators and Alarms':'🔔', 'Engine Management':'⚙', 'Vessel Management':'⚓', 'Propulsion Management':'✇', Appliances:'▤', Other:'•••' };
   const categoryColors = { Lighting:'#ffc34d', Navigation:'#54c7ff', Pumps:'#27d7d5', Power:'#b877ff', Entertainment:'#ee66d9', 'Fans/Ventilation':'#3ee0c5', Electronics:'#35b7ff', Climate:'#6cc8ff', Galley:'#ff9f58', 'Deck Equipment':'#3fc1d9', Safety:'#ff6576', Miscellaneous:'#8ea0b6', Refrigeration:'#7fd4ff', 'Bilge Pumps':'#27d7d5', 'House/Habitat':'#9bd66f', 'Vessel Critical':'#ff6576', '24-Hour Circuits':'#ffb84d', Communications:'#7aa2ff', Accessories:'#c9a5ff', 'Indicators and Alarms':'#ff8a5c', 'Engine Management':'#e0b060', 'Vessel Management':'#3fc1d9', 'Propulsion Management':'#58d0a8', Appliances:'#ff9f58', Other:'#8ea0b6' };
+
+  // [fork] On a Navico chartplotter (see the .mfd styles). The plotter adds
+  // mfd_name, mfd_model_detail, brand, lang and mode to the address.
+  // signalk-navico-embedder, the proxy that puts Signal K webapps on those
+  // plotters, also leaves window.SK_TOKEN on the page; either sign will do.
+  const MFD = /[?&](mfd_name|mfd_model_detail|brand|layout=mfd)\b/.test(location.search) || typeof window.SK_TOKEN === 'string';
+  if (MFD) document.documentElement.classList.add('mfd');
+  // Drawn icons for the plotter, whose fonts lack most of the symbol
+  // characters the desktop page uses (they show as empty boxes there).
+  const MFD_ICONS = {
+    home:'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>', dot:'<circle cx="12" cy="12" r="5" fill="currentColor"/>',
+    star:'<path d="M12 3l2.8 6 6.2.6-4.7 4.2 1.5 6.2L12 16.6 6.2 20l1.5-6.2L3 9.6 9.2 9z"/>',
+    ac:'<path d="M2 12c2.5-9 6-9 8.5 0s6 9 8.5 0"/><path d="M21 12h1"/>', battery:'<rect x="3" y="7" width="16" height="10" rx="2"/><path d="M22 10v4"/>',
+    gauge:'<path d="M4 18a9 9 0 1 1 16 0"/><path d="M12 14l4-6"/>', bolt:'<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>',
+    bulb:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5V15h8v-1.5A6 6 0 0 0 12 3z"/>',
+    compass:'<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>', drop:'<path d="M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z"/>',
+    music:'<path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="16" r="2"/>',
+    fan:'<circle cx="12" cy="12" r="2"/><path d="M12 10c-1-4 1-7 4-7 1 3-1 6-4 7zM13.7 13c4-1 7 1 7 4-3 1-6-1-7-4zM10.3 13c-1 4-4 6-7 5 0-3 3-5 7-5z"/>',
+    chip:'<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',
+    snow:'<path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9"/>', phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+    warn:'<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.500"/>', clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', plus:'<path d="M12 5v14M5 12h14"/>',
+    gear:'<circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
+    anchor:'<circle cx="12" cy="5" r="2"/><path d="M12 7v14M5 13a7 7 0 0 0 14 0M9 10h6"/>', sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
+    swap:'<path d="M4 9h15l-3-3M20 15H5l3 3"/>', tank:'<rect x="5" y="6" width="14" height="14" rx="2"/><path d="M5 13h14M9 6V3h6v3"/>',
+    temp:'<path d="M12 3a2 2 0 0 0-2 2v9a4 4 0 1 0 4 0V5a2 2 0 0 0-2-2z"/>', cloud:'<path d="M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1A4.5 4.5 0 0 1 17 18z"/>',
+    toggle:'<rect x="3" y="8" width="18" height="8" rx="4"/><circle cx="8" cy="12" r="2"/>', house:'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+    appliance:'<rect x="5" y="3" width="14" height="18" rx="2"/><circle cx="12" cy="14" r="4"/><path d="M8 6h2"/>'
+  };
+  const MFD_ICON_FOR = { all:'home', inuse:'dot', favorites:'star', ac:'ac', dc:'battery', monitor:'gauge',
+    Lighting:'bulb', Navigation:'compass', Pumps:'drop', 'Bilge Pumps':'drop', Power:'bolt', Entertainment:'music', 'Fans/Ventilation':'fan', Electronics:'chip', Climate:'snow', Refrigeration:'snow',
+    Communications:'phone', 'Vessel Critical':'warn', 'Indicators and Alarms':'warn', '24-Hour Circuits':'clock', Accessories:'plus', 'Engine Management':'gear', 'Vessel Management':'gear',
+    'Propulsion Management':'fan', 'House/Habitat':'house', Appliances:'appliance', 'Deck Equipment':'anchor',
+    Batteries:'battery', Solar:'sun', Alternators:'gear', Converters:'swap', 'Wind Generators':'fan', 'AC Power':'ac', Tanks:'tank', Temperatures:'temp', Environment:'cloud', 'Circuit current':'bolt', Inputs:'toggle' };
+  const mfdIcon = key => `<svg class="ico" viewBox="0 0 24 24">${MFD_ICONS[MFD_ICON_FOR[key]] || MFD_ICONS.dot}</svg>`;
+  if (MFD) window.czoneMfdIcon = mfdIcon; // the Monitoring tab's group icons
   let circuits = [], status = {}, modes = [], activeMode = null, vesselName = '', view = 'all', category = null, query = '', sort = 'name', socket = null;
   let socketReconnectTimer = null, watchdogTimer = null, lastSocketUpdateAt = 0, socketConnected = false;
   const WS_WATCHDOG_MS = 120000;
@@ -276,7 +362,7 @@
   const countCat = cat => scoped().filter(c => (c.subCategories || []).includes(cat)).length;
   const activeCount = () => circuits.filter(stateOf).length;
   const masterCount = m => circuits.filter(c => c.masterCategory === m).length;
-  const icon = c => categoryIcons[c] || '•';
+  const icon = c => MFD ? mfdIcon(c) : (categoryIcons[c] || '•');
   const color = c => categoryColors[c] || '#4bb5ff';
 
   function saveFavorites() { localStorage.setItem(favoritesKey, JSON.stringify([...favorites])); }
@@ -293,7 +379,7 @@
       ['ac','♆','AC',masterCount('AC')], ['dc','▣','DC',masterCount('DC')],
       ['monitor','◔','Monitoring',window.czoneMonitor ? window.czoneMonitor.count() : '']
     ];
-    document.querySelector('#mainNav').innerHTML = items.map(([v,i,t,n]) => `<button class="${view===v?'active':''}" onclick="setView('${v}')"><span class="nav-icon">${i}</span>${t}<span class="nav-count">${n}</span></button>`).join('');
+    document.querySelector('#mainNav').innerHTML = items.map(([v,i,t,n]) => `<button class="${view===v?'active':''}" onclick="setView('${v}')"><span class="nav-icon">${MFD ? mfdIcon(v) : i}</span>${t}<span class="nav-count">${n}</span></button>`).join('');
   }
 
   function renderCategories() {
@@ -333,7 +419,7 @@
     const title = category || ({all:'All Circuits',inuse:'In Use',favorites:'Favorites',ac:'AC Circuits',dc:'DC Circuits',search:'Search Results'}[view] || 'Circuits');
     document.querySelector('#sectionTitle').textContent = title;
     document.querySelector('#sectionCount').textContent = `${list.length} circuit${list.length===1?'':'s'}`;
-    document.querySelector('#sectionIcon').textContent = category ? icon(category) : view==='favorites' ? '☆' : view==='inuse' ? '●' : '⚡';
+    document.querySelector('#sectionIcon').textContent = MFD ? '' : category ? icon(category) : view==='favorites' ? '☆' : view==='inuse' ? '●' : '⚡';
     document.querySelector('#circuits').innerHTML = list.length ? list.map(circuitRow).join('') : `<div class="empty">No circuits match this view.</div>`;
   }
 
@@ -515,11 +601,28 @@
     if (Array.isArray(data.modes)) modes = data.modes;
     if (data.activeMode) activeMode = data.activeMode;
   }
+  // [fork] Signal K refused the plugin's data: nobody is logged in at this
+  // address (a login is kept per address, so venus.local and the IP address
+  // are separate). The page used to sit empty with "Connected" in the corner.
+  let needLogin = false;
+  function showLoginNeeded() {
+    needLogin = true;
+    const c = document.querySelector('#connection');
+    c.classList.remove('ok');
+    c.innerHTML = '<i></i><span>Not logged in to Signal K</span>';
+    renderNav();
+    const el = document.querySelector('#circuits');
+    if (el && !circuits.length) el.innerHTML = MFD
+      ? '<div class="empty">Signal K refused the request. On a chartplotter the login comes from the Navico embedder plugin: generate its authentication token and save.</div>'
+      : '<div class="empty">Signal K needs a login to show the circuits. <a href="/admin/#/login" style="color:#54c7ff">Log in</a>, then reload this page.</div>';
+  }
   async function refreshOnce(reason = 'manual') {
     try {
       const r = await fetch(`${API}/circuits`, { cache:'no-store', credentials:'include' });
+      if (r.status === 401 || r.status === 403) { showLoginNeeded(); return false; }
       if (!r.ok) throw new Error('Signal K plugin unavailable');
       const data = await r.json();
+      needLogin = false;
       mergeRest(data);
       document.querySelector('#connection').classList.add('ok');
       document.querySelector('#connection').innerHTML = '<i></i><span>Connected · live circuit data</span>';
@@ -583,6 +686,7 @@
   function renderModes() {
     const el = document.querySelector('#modes');
     if (!el) return;
+    if (el.parentElement) el.parentElement.classList.toggle('none', !modes.length); // hidden on a plotter when there are none
     if (!modes.length) { el.innerHTML = '<div class="empty" style="padding:10px 4px">No CZone modes found.</div>'; return; }
     el.innerHTML = modes.map(m => {
       const active = activeMode && activeMode.slug === m.slug;
@@ -621,10 +725,48 @@
 
   function render() { renderNav(); renderCategories(); renderCircuits(); renderStats(); renderModes(); renderHero(); }
 
+  // [fork] Drag to scroll on a chartplotter. Its touch arrives as mouse events,
+  // so a drag would select text and nothing would scroll. A press that moves
+  // more than a few pixels scrolls the nearest scrolling box (the circuit list
+  // or the left column); the tap that ends it is not passed on as a click.
+  if (MFD) {
+    let drag = null, swallow = false;
+    const scrollerOf = el => {
+      for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+        const oy = getComputedStyle(n).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight + 1) return n;
+      }
+      return document.scrollingElement || document.documentElement;
+    };
+    document.addEventListener('mousedown', e => {
+      if (e.button !== 0 || (e.target.closest && e.target.closest('input, select, canvas'))) return;
+      const box = scrollerOf(e.target);
+      drag = { box, y: e.clientY, top: box.scrollTop, moved: false };
+    }, true);
+    document.addEventListener('mousemove', e => {
+      if (!drag) return;
+      if (e.buttons === 0) { endDrag(); return; } // released outside the page
+      const dy = e.clientY - drag.y;
+      if (!drag.moved && Math.abs(dy) < 10) return;
+      drag.moved = true;
+      drag.box.scrollTop = drag.top - dy;
+      e.preventDefault();
+    }, true);
+    function endDrag() {
+      if (drag && drag.moved) { swallow = true; setTimeout(() => { swallow = false; }, 80); }
+      drag = null;
+    }
+    document.addEventListener('mouseup', endDrag, true);
+    window.addEventListener('blur', endDrag);
+    document.addEventListener('click', e => { if (swallow) { e.stopPropagation(); e.preventDefault(); swallow = false; } }, true);
+    document.addEventListener('contextmenu', e => e.preventDefault());
+    document.addEventListener('selectstart', e => { if (!(e.target.closest && e.target.closest('input'))) e.preventDefault(); });
+  }
   document.querySelector('#search').addEventListener('input', e => { query=e.target.value.trim(); view=query?'search':'all'; category=null; render(); });
   document.querySelector('#sort').addEventListener('change', e => { sort=e.target.value; renderCircuits(); });
 
   function updateSocketIndicator(text, ok) {
+    if (needLogin) return; // keep "Not logged in" until the list loads
     const el = document.querySelector('#connection');
     el.classList.toggle('ok', !!ok);
     el.innerHTML = `<i></i><span>${text}</span>`;

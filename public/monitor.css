@@ -139,3 +139,28 @@
 /* Circuit list: the arrow beside ON/OFF opens that circuit's current trend */
 .trend-arrow { border:0; background:transparent; cursor:pointer; padding:6px 8px; border-radius:8px; font-size:19px; line-height:1; }
 .trend-arrow:hover { color:#cfe3f5; background:rgba(55,143,215,.14); }
+
+/* Shown when a card is in the GX but Signal K may not write to it */
+.mon-card-fix { margin:12px 15px; padding:12px 14px; border:1px solid rgba(255,195,77,.35); border-radius:12px; background:rgba(255,195,77,.07); font-size:13px; color:#d7e3ee; }
+.mon-card-fix[hidden] { display:none; }
+.mon-card-fix ol { margin:8px 0 0; padding-left:20px; line-height:1.6; }
+.mon-card-fix a { color:#54c7ff; font-weight:700; }
+
+/* [fork] Chartplotter (see the .mfd notes in index.html): its browser has no
+   flex gap, so the spacing is given as margins, and the touch targets grow. */
+.mfd .mon-head-icon { display:none; }
+.mfd .circuit.mon-row { grid-template-columns:44px minmax(0,1fr) auto auto 34px; }
+.mfd .mon-icon { background:rgba(120,170,220,.14); }
+.mfd .mon-subhead strong { font-size:15px; }
+.mfd .mon-subhead .subtle { font-size:12px; }
+.mfd .mon-pill > * + *, .mfd .mon-check > * + *, .mfd .mon-tip-row > * + * { margin-left:7px; }
+.mfd .mon-subhead > * + *, .mfd .mon-pick-group > * + * { margin-left:10px; }
+.mfd .mon-values > * { margin:0 0 6px 8px; }
+.mfd .mon-right > * + * { margin-top:6px; }
+.mfd .mon-value > span:first-child > * + * { margin-left:4px; }
+.mfd .mon-controls > *, .mfd .mon-custom > * { margin:0 8px 8px 0; }
+.mfd .mon-custom label > * + * { margin-left:6px; }
+.mfd .mon-pill, .mfd .mon-check { font-size:13px; }
+.mfd .mon-check input { width:22px; height:22px; }
+.mfd .mon-value { min-height:50px; font-size:17px; }
+.mfd .mon-controls button, .mfd .mon-controls select { min-height:44px; font-size:14px; }
