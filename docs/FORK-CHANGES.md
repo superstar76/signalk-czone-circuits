@@ -1,168 +1,269 @@
-# What the `monitoring` fork adds
+# signalk-czone-circuits: the monitoring fork
+
+What the fork adds to Matt Mitchell's plugin and what it changes, as of 3 October 2026.
 
 **Fork:** `github.com/superstar76/signalk-czone-circuits`, branch `monitoring`
-**Based on:** `mattsmitchell/signalk-czone-circuits` `main` at `45c47d1` (beta.20), merged in, no conflicts outstanding
-**Tests:** Matt's full suite plus 4 new test files all pass (`npm test`)
-**Bench-tested:** Cerbo GX, Venus OS 3.80, Signal K 2.27, CZone test bench (OI, SI, MI, display)
+**Based on:** Matt Mitchell's `signalk-czone-circuits`, `main` at `45c47d1` (beta.20), merged in with no conflicts. His beta.22 restructure is not merged yet.
+**State:** 3 October 2026
+**Run on:** the CZone test bench and Compass Rose, both on a Cerbo GX with Venus OS 3.80 and Signal K 2.27
+**Size:** about 4,100 lines of new code in 14 new files, 1,800 lines of new tests in 9 new test files, and about 260 lines changed in four of Matt's files
 
-Everything is additive: ~3,700 new lines, almost all in new files. Matt's existing files change in a few marked places only (listed at the end).
+## Summary
 
----
+Matt's plugin reads a CZone configuration file (ZCF), lists the circuits in a webapp and switches them over NMEA 2000. The fork keeps all of that and adds five things, all driven by the same ZCF with nothing set up by hand:
 
-## 1. Monitoring tab
+- **Monitoring:** every meter and sender in the CZone configuration, live, in a Monitoring tab.
+- **Trends:** history for every monitored value and every circuit's current, kept on an SD card.
+- **Circuit current and temperature:** amps per circuit, and the temperature that belongs to a circuit, shown with the circuit.
+- **Victron switch pane:** the CZone circuits as switches on the GX touch screen, Remote Console and VRM.
+- **A truer circuit list:** state on boats whose ZCF has no status table, every category named, and circuits that no CZone display would list left out.
 
-A **Monitoring** entry in the webapp sidebar lists everything the CZone configuration monitors, read from the uploaded ZCF. Nothing is configured by hand.
+The rule throughout: once the ZCF is uploaded, the data should appear. Where the bus is ambiguous (several devices on one instance), the ZCF decides.
+
+## 1. What is new for the person using it
+
+### 1.1 Monitoring tab
+
+A **Monitoring** entry in the webapp lists everything the CZone configuration monitors.
 
 | Group | From the ZCF | Readings |
 |---|---|---|
-| Batteries | DC meters | voltage, current, state of charge, temperature |
+| Batteries | DC meters of type Battery | voltage, current, state of charge, temperature |
+| Solar, Alternators, Converters, Wind Generators | DC meters of that type | voltage, current |
 | AC Power | AC meters | voltage, current, power, frequency |
+| Tanks | tank senders | level %, volume |
 | Temperatures | temperature senders | °C |
 | Environment | pressure senders | hPa / kPa |
-| Tanks | tank senders | level %, volume |
-| Inputs | switch inputs | (state source still being identified) |
+| Inputs | switch inputs | listed; state not decoded yet |
 
-- **Live on the bench:** House Battery and 5V System (Meter Interface), Victron Shunt (Cerbo, instance 2), Power In/Out (Meter Interface AC, e.g. 236 V / 5.3 A / 1238 W / 49.9 Hz with a heater on), Ruuvi and Victron temperature sensors.
-- **Matching:** every reading is matched by the NMEA 2000 instance configured in CZone:
-  - meters wired to a CZone module are read only from that module's N2K source address (learned from CZone module status frames);
-  - third-party sensors are matched on instance + source.
-- **Looks:** built from the webapp's own classes (section headers, circuit-row layout, value boxes the size of the ON/OFF button). Group colours are CSS variables, ready for a theme configurator.
-- **Groups:** DC meters are grouped by the DC type set in the Configuration Tool: Batteries, Solar, Alternators, Converters, Wind Generators. In the webapp's side list, the categories follow the view: on AC, DC, In Use or Favourites only the categories of the circuits in that view (a category narrows the view, a second click clears it); on Monitoring the list is the monitoring groups, and choosing one shows that group only.
+- **Grouping:** a DC meter goes under its DC Type from the Configuration Tool, so a solar meter is under Solar and not under Batteries.
+- **Live or not:** each row says LIVE or NOT ON BUS. A row that is not on the bus names the NMEA 2000 instance the ZCF expects ("Nothing is sending instance 3 on NMEA 2000"), which is the number to set on the sending device.
+- **Looks:** built from the webapp's own classes, so it matches the circuit list. Group colours are CSS variables.
 
-## 2. Circuit current
+### 1.2 Trends
 
-- **Decoding:** CZone's output tables are decoded per channel, 0.1 A resolution, and mapped to circuits using the structural parser's outputs: PGN 130822 (DC modules), 130817 (AC modules and the Output Interface) and 130825 (Control X PLUS, a bit-packed form of the same table that needs no CZone display on the network).
-- **Published** at `electrical.czone.<slug>.current`, next to Matt's `.switch.state` / `.switch.brightness`.
-- **Shown** under ON on each circuit's button.
-- **Trend:** the › arrow beside ON/OFF opens that circuit's current trend.
-- **Off = 0 A:** an output whose level word says OFF reads 0 A (the Output Interface otherwise reports a constant 0.1 A).
-
-## 2a. What the fork adjusts on the parser's result (`lib/fork-mapping.js`)
-
-One step after `zcf.load()`, shared by the webapp, the Signal K paths and the Victron switch pane:
-
-- **State without a status table** (Compass Rose, Persevere): bit n of PGN 65284 = output channel n.
-- **Every sub-category named** (20 standard ones) and the five user-defined ones read from the ZCF by name (Meitaki: Winches, Furlers, Lithium). `circuit.subCategories` lists all that are ticked, most specific first; `circuit.group` is the first of them, used where a circuit can be in one group only (Victron switch pane). Order: `GROUP_PRIORITY` in `lib/fork-mapping.js`.
-- **Virtual-switch circuits hidden** (all outputs on channel 32 or above), unless the setting is ticked.
-- **Circuits not on any CZone display** (no control that is "All Display Interfaces", a display / chartplotter, or the Wireless Interface) are marked `hidden`: left out of the webapp list (`/circuits` names them in `notShown`) and the Victron pane, still decoded and published to Signal K. Setting `showNonDisplayCircuits` shows them.
-
-## 2b. AC and third-party readings
-
-- **AC:** the older PGNs 127503 / 127504 are decoded as well as 127744 / 127747. All feed the same AC meter readings, so a meter shows once; when both styles are on the bus the older pair is used.
-- **DC meters matched by type:** each DC meter's type (battery, alternator, converter, solar) is read from the ZCF. When several devices send a third-party meter's instance, the one whose PGN 127506 declares that type is used; for a battery, the one that reports state of charge. Compass Rose: House Battery from the BMS (of five devices on instance 0), Solar from the MPPT's array side (of three on instance 1). `/monitor/bus` lists `dcMeters` (wanted type, every sender, the one chosen). Solar, alternator and converter meters show voltage and current only.
-- **One sender per reading:** a third-party reading stays with the device that is sending it and does not flip between two devices that use the same instance. `/monitor/bus` lists `sensorOwners` and `contested`.
-
-## 3. Trending
-
-- **Sampling:** every 10 s by default (setting: 5 / 10 / 15 / 30 / 60 s), buffered, written once a minute.
-- **Files:** plain CSV, no database, in two tiers per series:
+- **What is recorded:** every live monitored value and every circuit's current.
+- **Sampling:** every 10 seconds by default (setting: 5, 10, 15, 30 or 60 s), buffered and written once a minute.
+- **Files:** plain CSV, no database, in two tiers per value:
 
   | Tier | File | Contents |
   |---|---|---|
   | Full detail | `<series>/<YYYY-MM-DD>.csv` | `time,value`, written when the value changes and at least every 10 minutes |
   | Summary | `<series>/summary/<YYYY-MM>.csv` | `bucket,min,avg,max` per 10 minutes, from every sample |
 
-- **Retention:** kept until storage runs low; then the oldest full-detail days are removed first, summaries last. Recording never stops. An optional setting caps full detail at 31 / 90 / 365 days.
-- **Earlier history:** data already on the card is read in place and its summaries built once at start. Old folder names are matched automatically where they are one of the reading's Signal K paths; others are mapped in `aliases.json` in the trend folder.
-- **Sizing:** 200 points at 10 s is at most 12.6 GB/year of full detail plus 0.34 GB/year of summaries. Minimum card: 16 GB.
-- **Chart:** an in-page panel with 1 h / 24 h / 7 d / 31 d / 90 d / 1 y or a **custom period** (from/to), min/avg/max/now tiles, hover crosshair, and gaps where data is missing. Ranges over 48 h read the summaries and draw the average with a min–max band, so short spikes stay visible.
-- **Several values on one chart:** "Add value" puts any other trended value (meter, sender or circuit current) on the chart, up to 5. Each unit gets its own scale (first on the left, others on the right, ticks on shared grid lines); "Stacked" shows one plot per unit on the same time axis instead. A legend row per value gives now/min/avg/max; the crosshair reads every value at that time.
-- **Storage:**
-  - Victron GX: SD card or USB stick only, never internal flash. With no card nothing is written or held in memory;
-  - other platforms: the Signal K data folder;
-  - optional "Trend folder" setting overrides both.
+- **Retention:** kept until storage runs low. Then the oldest full-detail days go first and summaries last, so recording never stops. An optional setting caps full detail at 31, 90 or 365 days.
+- **Where:** on a Victron GX, an SD card or USB stick only, never internal flash; with no card, nothing is written or held in memory. On other systems, the Signal K data folder. A "Trend folder" setting overrides both. Minimum card: 16 GB.
+- **Chart:** an in-page panel with 1 h, 24 h, 7 d, 31 d, 90 d, 1 y or a custom from/to period; now/min/avg/max; a hover crosshair; gaps where data is missing. Periods over 48 hours draw the average with a min–max band, so short spikes stay visible.
+- **Several values on one chart:** "Add value" puts any other trended value on the chart, up to five. Each unit gets its own scale; "Stacked" shows one plot per unit on the same time axis.
+- **Earlier history:** data already on the card from the February plugin is read in place. Old folder names are matched automatically where possible; others are mapped in `aliases.json` in the trend folder. Compass Rose's history back to late September is readable this way.
 
-## 4. Third-party sensors straight off the bus
+### 1.3 Circuit current
 
-- **Why:** Signal K doesn't pass the GX's own NMEA 2000 transmissions (Cerbo temperatures, SmartShunt) to plugins. On a GX, Signal K's `electrical.batteries.<n>` uses VRM instances, not the N2K instances CZone is configured with.
-- **How:**
-  - only when the ZCF has a third-party sender or virtual meter, the plugin runs `candump` on `vecan0`, kernel-filtered to PGNs 130312/130316/130314/127505/127508/127506/127744/127747;
-  - Venus OS ships `candump`. Elsewhere this does nothing and Signal K paths are used.
+- **Shown** under ON on each circuit's button in the webapp, and in the Victron switch label.
+- **Trend:** the arrow beside ON/OFF opens that circuit's current trend.
+- **Decoded** from CZone's own output tables, 0.1 A resolution:
 
-## 5. Victron switch pane
+  | PGN | Sent by |
+  |---|---|
+  | 130822 | DC modules |
+  | 130817 | AC modules and the Output Interface |
+  | 130825 | Control X PLUS (a bit-packed form of the same table; needs no CZone display on the network) |
 
-- **Opt-in setting:** registers `com.victronenergy.switch.czone_circuits` on the GX's system D-Bus, following Victron's SwitchableOutput API.
-- **Channels:** every ZCF circuit becomes a switch:
-  - toggle (or momentary, chosen in the pane);
-  - dimmable with a slider;
-  - one card per CZone category.
-- **Both directions:**
-  - pane taps call the same `sendCircuitState` / `sendCircuitBrightness` as the webapp, so "Allow sending" still applies;
-  - CZone changes (display, wall switch, webapp) update the pane.
-- **Current in the label:** "Light 1 (0.1 A)" while on (optional), because Venus OS doesn't display `/Current` yet. The GX sorts switches by label, and this form keeps a switch in the same place on or off.
-- **Pane edits kept:** renames, groups and types made in the pane are saved.
-- **Dependency:** adds `dbus-native` (same library as other Signal K ↔ Venus plugins).
-- **Device name:** defaults to `CZone <vessel name from the ZCF>`; a name typed in the GX device list is accepted, kept in `victron-switches.json` and survives restarts and new ZCF uploads. Clearing it restores the default.
-- **Temperature in the label:** where a temperature input is named after a circuit ("Freezer" and "Freezer Temperature", ignoring case and punctuation), the switch reads "Freezer (-8.2 °C, 2.9 A)", on or off, in the unit set on the GX (`/Settings/System/Units/Temperature`). A label is 32 bytes: a long name first gets the compact form ("-18°C"), then the name is cut. The temperature is dropped after five minutes without a reading. Also published at `electrical.czone.<slug>.temperature` (kelvin) and shown beside the circuit's name in the webapp (°C), where clicking it opens its trend. Setting `victronSwitchTemperature`.
-- **State source:** the pane takes each circuit's state from the host plugin's decoded state (`getState` handed over with the send functions), the same one the webapp shows; reading it back from Signal K is the fallback. On Compass Rose the pane stayed all-off after a restart while Signal K and the webapp had the right state.
-- **One live service:** the newest instance takes the D-Bus name (replace flags); an older one that finds the name gone retires. A start overtaken by a stop does not carry on. A D-Bus connection error is logged instead of taking Signal K down (stopping the plugin while the connection was still opening crashed the server).
-- **`/victron/status`** lists the circuits the pane has as on, any that differ from Signal K (`mismatch`), and `diag` (process id, instance number, resync count and errors, whether this instance owns the service name).
+- **Off reads 0 A:** an output whose level says off reads 0 A, where the module otherwise reports a constant 0.1 A.
 
-## 6. ZCF parsing
+### 1.4 Circuit temperature
 
-| File | Adds |
+Where a temperature input is named after a circuit, the two are paired: circuit "Freezer" and input "Freezer Temperature" (or "Freezer Temp"), ignoring case and punctuation. Nothing else pairs, and a name shared by two inputs pairs with nothing.
+
+- **Webapp:** a small temperature chip beside the circuit's name; clicking it opens the temperature's trend.
+- **Victron switch pane:** in the switch label (see 1.5).
+- **Quiet sender:** the temperature is dropped after five minutes without a reading.
+
+### 1.5 Victron switch pane
+
+An opt-in setting registers the circuits with the GX as `com.victronenergy.switch.czone_circuits`, following Victron's switchable-output API.
+
+- **Each circuit is a switch:** toggle or momentary, or a slider for a dimmable circuit.
+- **Both directions:** a tap in the pane switches the circuit with the same code the webapp uses, so "Allow sending" still applies; a change made anywhere else shows in the pane.
+- **Groups:** one group per circuit, taken from its CZone sub-category (see 1.6).
+- **Label:** the name, then the temperature and the current: "Freezer (-8.2 °C, 2.9 A)", "Fridge (5.1 °C)", "Lights (1.9 A)". The temperature is in the unit set on the GX. A label is limited to 32 characters: a long name first gets a compact temperature ("-18°C"), then the name is cut.
+- **Order:** the GX lists switches alphabetically by label and has no other order. The label is written so a switch stays in the same place whether it is on or off.
+- **Edits made on the GX are kept:** switch names, groups and types, and the device's own name.
+
+### 1.6 The circuit list
+
+- **State on boats with no status table.** Some ZCFs (Compass Rose, Persevere) have no status table, and every circuit read as off. On those, state is taken from the module's output bitmap: bit n is output channel n.
+- **Every category named.** All 21 standard sub-categories and the five user-definable ones, whose names are read from the ZCF (Meitaki: Winches, Furlers, Lithium).
+- **Virtual-switch circuits hidden.** A circuit that only drives virtual switches is not a circuit anyone switches.
+- **Circuits not on any CZone display hidden.** A circuit with no display among its Circuit Controls (thermostat feeds, "pump running" indicators, alarm relays) is left out of the webapp and the pane, as it is on a CZone display. Its state still goes to Signal K.
+- **One group where only one fits.** A circuit ticked in several categories is listed under each in the webapp, as on a CZone display. The Victron pane allows one group, so it takes the first in a fixed order: the owner's own categories, then Indicators and Alarms, Navigation, Refrigeration, Bilge Pumps, Pumps, Lighting and so on.
+- **The category list follows the tab.** On AC, DC, In Use or Favorites, only the categories of the circuits in that tab are listed, with counts for that tab. A category narrows the tab; a second click clears it. On Monitoring the list is the monitoring groups.
+
+### 1.7 Settings page
+
+- **Saves as you go:** the page now says so, and confirms each save.
+- **New settings:** see section 4.
+
+## 2. How readings are found with nothing configured
+
+- **The ZCF gives the identity.** Each meter and sender has an NMEA 2000 instance in the ZCF (and a source or fluid type for senders). The same numbers are in the standard PGNs on the bus.
+- **Wired to a CZone module:** read only from that module's own NMEA 2000 address, learned from the module's status messages.
+- **Third-party:** read straight off the CAN interface with `candump`, filtered to the sensor PGNs. This is needed on a GX because Signal K does not pass the GX's own transmissions to plugins, and its own battery paths use VRM instances, not the NMEA 2000 instances CZone is configured with.
+- **Several devices on one instance:** the meter's DC type in the ZCF is matched to the type each device declares in PGN 127506. For a battery, the device that reports state of charge wins; a charger that also reports a "battery" loses to a shunt. The choice is the same after every restart.
+- **One device per reading:** other third-party readings stay with the device sending them and do not flip between two devices using the same instance.
+- **AC, both styles:** PGNs 127503 / 127504 and 127744 / 127747 feed the same AC readings, so a meter shows once.
+
+PGNs decoded:
+
+| Reading | PGN |
 |---|---|
-| `lib/zcf-circuits.js` | Our structural circuit parser **with** the hidden-duplicate rule. Matt's `zcf-circuit-table.js` is the same parser minus that rule; once he adds it, our copy can go and the monitor can use his |
-| `lib/zcf-monitor.js` | Meters table, DC/AC meter settings tables (the real NMEA instances), Inputs table (senders: source/instance/fluid; calibration points) |
-| `docs/ZCF-FORMAT.md` | Layouts and validation across 8 ZCFs |
+| Battery and DC meters | 127508, 127506 |
+| AC meters | 127503, 127504, 127744, 127747 |
+| Temperature | 130312, 130316 |
+| Pressure | 130314 |
+| Tank level | 127505 |
+| Circuit current | 130822, 130817, 130825 |
 
-## 7. Settings added
+## 3. What was learned about the ZCF and the bus
+
+These are in the brief for Matt, with evidence, for his parser.
+
+| Finding | Detail |
+|---|---|
+| Meter instance | The Meters list byte is a meter id. The NMEA 2000 instance is in the DC and AC settings tables that follow |
+| DC type | Byte 28 of the DC settings record: low nibble is the NMEA 2000 DC type, high nibble the nominal voltage |
+| Inputs table | Senders with their source, instance and fluid type, and calibration points |
+| Sub-categories | Flags bits 16 to 31 and category word bits 0 to 3 and 13, in the Configuration Tool's dialog order |
+| User-defined categories | Category word bits 7 to 11; names in a small block after the backlight-zone table |
+| Virtual switches | Virtual switch n is output channel 31 + n |
+| Display controls | Control module 0 is "All Display Interfaces"; module type 16 is a display or chartplotter, 17 the Wireless Interface |
+| No status table | On those configurations the 65284 bitmap is the module's output channels |
+| Control X PLUS | Current and level are in PGN 130825, 22-bit records, not 130822 |
+
+## 4. Settings added
 
 | Setting | Default |
 |---|---|
 | Show CZone circuits in the Victron switch pane | off |
 | Show circuit current in the switch label | on |
-| Trend folder (optional) | automatic |
+| Show temperature in the switch label | on |
 | Show virtual switch circuits | off |
+| Show circuits that are not on any CZone display | off |
+| Trend folder | automatic |
 | Trend sample rate | 10 seconds |
 | Keep full-detail trend data for | as long as there is space |
 
-All six are in both `schema` and the custom config panel (`public/remoteEntry.js`).
+## 5. Signal K paths added
 
-## 8. Diagnostics routes
-
-`/monitor/items`, `/monitor/modules`, `/monitor/bus`, `/monitor/debug?path=`, `/monitor/values`, `/trend/status`, `/trend?path=&range=`, `/victron/status`.
-
----
-
-## New files
-
-```
-lib/monitor/index.js      monitor lifecycle, value resolution, routes
-lib/monitor/catalog.js    ZCF -> monitored items and Signal K candidates
-lib/monitor/currents.js   CZone output-table decoding -> circuit current
-lib/monitor/sensors.js    standard sensor / meter PGN decoding
-lib/monitor/storage.js    trend storage: two tiers, write-on-change, space guard
-lib/monitor/wire.js       candump listener for third-party sensors
-lib/victron/vedbus.js     minimal Victron VeDbus service on dbus-native
-lib/victron/switches.js   CZone circuits as Venus OS switchable outputs
-lib/fork-mapping.js       state fallback, categories and groups, virtual-switch circuits
-lib/monitor/fastpacket.js fast-packet reassembly (current tables, older AC PGNs)
-lib/zcf-circuits.js       structural circuit parser (see §6)
-lib/zcf-monitor.js        meters, meter settings, inputs
-public/monitor.js         Monitoring tab + trend panel
-public/monitor.css
-test/monitor.test.js, test/victron-switches.test.js,
-test/zcf-circuits.test.js, test/zcf-monitor.test.js,
-test/fork-mapping.test.js, test/control-x-plus.test.js,
-test/ac-legacy.test.js, test/dc-meters.test.js,
-test/circuit-temperature.test.js
-test/fixtures/TestBench-2026-10-01.zcf
-docs/ZCF-FORMAT.md
-```
-
-## Changes to Matt's files
-
-| File | Change |
+| Path | Value |
 |---|---|
-| `index.js` | Require + create the monitor (2 lines). `monitor.start/stop/registerRoutes` in start/stop/router (3 lines). `monitor.setControls({state, brightness})` handing the switch pane his send functions (4 lines). `current` added to `/circuits` items (1 line). Five schema properties |
-| `public/index.html` | Load `monitor.css` / `monitor.js`. "Monitoring" nav entry. Hide the circuit list while Monitoring is shown. Amps under ON. The › arrow becomes a button opening the current trend. WebSocket subscription + handler for `.current` |
-| `public/remoteEntry.js` | Five settings controls (switch pane, label current, trend folder, sample rate, full-detail retention) |
-| `package.json` | `dbus-native` dependency; four test files added to `npm test` |
+| `electrical.czone.<circuit>.current` | amps |
+| `electrical.czone.<circuit>.temperature` | kelvin, where a temperature input is named after the circuit |
 
-## Before opening the pull request
+Matt's `electrical.czone.<circuit>.switch.state` and `.switch.brightness` are unchanged. Meter and sender readings are held in the plugin for the Monitoring tab and trends; they are not published to Signal K.
 
-- [ ] Leave `docs/HANDOVER-czone-signalk.md` and `docs/BRIEF-FOR-MATT.md` out of the PR. They're our working notes and mention customer boats.
-- [ ] If Matt has added the hidden-duplicate rule, point `lib/monitor/catalog.js` at his `zcf-circuit-table.js` and drop `lib/zcf-circuits.js` and its test.
-- [ ] Merge his latest `main` once more; run `npm test`.
-- [ ] Bench re-check: monitoring, trends with an SD card, switch pane both ways.
+## 6. Diagnostic pages
+
+All under `/plugins/signalk-czone-circuits`.
+
+| Page | Shows |
+|---|---|
+| `/monitor/items` | every monitored item with its live readings; circuit-temperature pairings |
+| `/monitor/bus` | what reaches the plugin from the bus; every device seen per reading; which device each DC meter was given and why |
+| `/monitor/modules` | CZone module to NMEA 2000 address |
+| `/monitor/debug?path=` | everything the plugin sees for one path |
+| `/monitor/values` | current value of every trended series |
+| `/trend/status` | where trends are stored, free space, sample rate |
+| `/trend?path=&range=` | a series' data |
+| `/victron/status` | the switch pane: circuits it has as on, any that disagree with the plugin, the GX's unit setting, recent requests |
+
+## 7. Faults found and fixed along the way
+
+| Fault | Cause | Fix |
+|---|---|---|
+| Every circuit off, only ON could be sent (Compass Rose) | ZCF has no status table | State from module and channel |
+| No circuit current (Compass Rose) | Control X PLUS uses PGN 130825 | Decoder for the packed table |
+| Switch pane all off after a restart | The pane read state back from Signal K and missed it | The pane takes state from the plugin's own decoded state |
+| Signal K could crash when the plugin was stopped while starting | Unhandled error on a D-Bus connection closed mid-handshake | Error handled; overtaken starts end cleanly |
+| "Solar" showed 12.6 V, 0 A | Three devices on DC instance 1; the wrong one was taken | Device matched by DC type |
+| AC not shown | Boat's AC data is on PGNs 127503 / 127504 | Both AC styles decoded |
+| Switches changed place in the pane when turned on | The current suffix changed the alphabetical order | Suffix written as "(1.5 A)" |
+| Device name on the GX would not hold | The plugin refused the edit | Edit accepted and kept |
+| Bilge pumps under "DC" | Bilge Pumps category not located | Found and named |
+
+## 8. Files
+
+New files:
+
+```
+lib/monitor/index.js      monitor lifecycle, sender choice, values, routes
+lib/monitor/catalog.js    ZCF -> monitored items, groups, circuit-temperature pairs
+lib/monitor/currents.js   CZone output tables -> circuit current
+lib/monitor/sensors.js    standard meter and sender PGN decoding
+lib/monitor/fastpacket.js fast-packet reassembly
+lib/monitor/storage.js    trend storage: two tiers, write-on-change, space guard
+lib/monitor/wire.js       candump listener for third-party devices
+lib/victron/vedbus.js     minimal Victron D-Bus service
+lib/victron/switches.js   CZone circuits as GX switchable outputs
+lib/fork-mapping.js       state fallback, categories and groups, hidden circuits
+lib/zcf-circuits.js       structural circuit parser (with the hidden-duplicate rule)
+lib/zcf-monitor.js        meters, meter settings, inputs
+public/monitor.js         Monitoring tab and trend panel
+public/monitor.css
+docs/ZCF-FORMAT.md        layouts, checked across the sample ZCFs
+test/                     9 new test files, 2 new ZCF fixtures
+```
+
+Changes to Matt's files:
+
+| File | Lines | Change |
+|---|---|---|
+| `index.js` | +92, −4 | Create, start and stop the monitor; hand the switch pane the send functions and the decoded state; one call after `zcf.load()` to `fork-mapping`; `current`, `temperature` and `notShown` on `/circuits`; eight settings |
+| `public/index.html` | +63, −11 | Monitoring tab; amps under ON; trend arrow; temperature chip; category list that follows the tab; icons for the new categories |
+| `public/remoteEntry.js` | +101 | Controls for the eight settings; saved confirmation |
+| `package.json` | +4, −1 | `dbus-native` dependency; the new tests in `npm test` |
+
+## 9. Tests
+
+`npm test` runs Matt's suite and the fork's, 21 files, all passing. The fork's tests use frames captured on the bench and on Compass Rose, and eight sample ZCFs (two bench, two Compass Rose, Meitaki, Persevere, Sel Citron, SugarShack).
+
+## 10. What has been confirmed where
+
+| Feature | Bench | Compass Rose |
+|---|---|---|
+| Monitoring tab, wired and third-party meters | yes | yes |
+| Trends on an SD card | not yet: no card fitted | yes, with February's history |
+| Circuit current | yes (130822 / 130817) | yes (130825) |
+| Switch pane, both directions | yes | yes |
+| Pane state after a restart | not re-checked | yes, three restarts |
+| State with no status table | does not apply | yes |
+| DC meters matched by type | not re-checked | yes (House Battery, Solar) |
+| AC from 127503 / 127504 | does not apply | yes |
+| Categories, hidden circuits, category list | not re-checked | yes |
+| Temperature in the label and webapp | not re-checked | Freezer yes; Fridge sensor not on the bus |
+
+The bench has not had the builds of 3 October installed.
+
+## 11. Load on the Cerbo
+
+Measured on Compass Rose, plugin off against plugin on: Signal K at about 41 % and 45 % CPU, a difference smaller than the swing within either run. Idle stayed near 25 % and the load average near 4 both ways. The Cerbo is close to its limit with Signal K, Node-RED and the other apps; the plugin adds nothing measurable. A Cerbo GX MK3 is the comfortable choice for that kind of installation. The plugin has not been run on one.
+
+## 12. Limits and open items
+
+- **Matt's beta.22 restructure is not merged.** A clean-up pass of the fork is planned with that merge: one source of state for the pane, one way of choosing a sender, and the monitor's main file split up.
+- **Our own copy of the circuit parser.** `lib/zcf-circuits.js` is Matt's structural parser plus the hidden-duplicate rule. Once his has the rule, ours can go.
+- **Switch inputs** are listed but their state is not decoded.
+- **Per-display permissions** are not respected: a circuit that only one display may switch off can be switched off from the webapp and the pane.
+- **Pane order** is alphabetical; Victron has no setting for it.
+- **The GX unit setting** reads empty on Compass Rose and is treated as °C. What it reads when set to Fahrenheit has not been seen.
+- **Compass Rose:** several Victron devices share DC instances 0 and 1; the plugin picks the right ones, the MFD does not. Renumbering and the Fridge temperature tag wait for the NGT-1.
+- **Signal K 2.27 admin page:** a plugin's settings sometimes will not reopen without a page refresh. This is a Signal K fault, fixed in 2.33.
+- **Parked from the bench:** units from the ZCF, RGB circuits, a Node-RED palette, the occasional current drop-out.
+
+## 13. Before opening the pull request
+
+- [ ] Leave `docs/HANDOVER-czone-signalk.md` and `docs/BRIEF-FOR-MATT.md` out. They are working notes and name customer boats.
+- [ ] Merge Matt's latest `main` and do the clean-up pass.
+- [ ] If his parser has the hidden-duplicate rule, use it and drop `lib/zcf-circuits.js`.
+- [ ] Remove the two leftover `status-fallback` files on GitHub.
+- [ ] Re-check on the bench and on Compass Rose.
