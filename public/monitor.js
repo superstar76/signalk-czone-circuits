@@ -19,7 +19,7 @@
   const RANGES = [['1h', '1 h'], ['24h', '24 h'], ['7d', '7 d'], ['31d', '31 d'], ['90d', '90 d'], ['1y', '1 y']];
   const RANGE_MS = { '1h': 3600e3, '24h': 86400e3, '7d': 7 * 86400e3, '31d': 31 * 86400e3, '90d': 90 * 86400e3, '1y': 365 * 86400e3 };
   const PREF_KEY = 'signalk-czone-circuits:monitor';
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   let items = []
   let trend = { available: false }

@@ -59,7 +59,7 @@
     .category-nav .category-card.active { background:linear-gradient(145deg,rgba(20,104,168,.42),rgba(10,38,62,.94)); border-color:rgba(38,188,255,.65); box-shadow:inset 0 0 0 1px rgba(38,188,255,.14); }
     .main { min-width:0; padding: 24px 20px 42px; }
     .hero { min-height:154px; border:1px solid var(--line); border-radius:22px; padding:27px 28px; position:relative; overflow:hidden; background-image: linear-gradient(90deg, rgba(5,20,36,.96) 0%, rgba(7,25,43,.84) 45%, rgba(7,25,43,.38) 100%), url('hero-bg.jpg'); background-size:cover; background-position:center; box-shadow:var(--shadow); }
-    .hero:after { content:""; position:absolute; inset:0; background:linear-gradient(180deg, rgba(4,16,29,.12), rgba(4,16,29,.32)); pointer-events:none; }
+    .hero:after { content:""; position:absolute; top:0; right:0; bottom:0; left:0; background:linear-gradient(180deg, rgba(4,16,29,.12), rgba(4,16,29,.32)); pointer-events:none; }
     .hero h1, .hero p { position:relative; z-index:1; }
     .hero h1 { margin:0; font-size:30px; line-height:1.15; letter-spacing:-.7px; }
     .hero p { margin:9px 0 0; color:#a9c2d9; font-size:14px; }
@@ -239,7 +239,7 @@
   const favoritesKey = 'signalk-czone-circuits:favorites';
   let favorites = new Set(JSON.parse(localStorage.getItem(favoritesKey) || '[]'));
 
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const nameKey = c => c.slug || c.name;
   const stateOf = c => c.state && c.state.state === 'ON';
   const percentOf = c => c.state && Number.isFinite(c.state.percent) ? c.state.percent : null;
@@ -343,7 +343,7 @@
     const cats = (c.subCategories || []).slice(0,3).map(x => `<span class="tag cat" style="--cat:${color(x)}">${esc(x)}</span>`).join('');
     const disabled = p && p.kind === 'state';
     const toggle = `<button type="button" class="toggle ${on?'on':'off'} ${disabled?'pending':''}" ${disabled?'disabled':''} aria-busy="${disabled?'true':'false'}" aria-label="Turn ${on?'off':'on'} ${esc(c.name)}" onclick="toggleCircuit('${encodeURIComponent(c.name)}',${!on})">${disabled?'Sending…':(on?`ON${typeof c.current === 'number' ? `<small class="toggle-amps">${c.current.toFixed(1)} A</small>` : ''}`:'OFF')}</button>`;
-    const control = dim ? `<div class="control"><div class="range-wrap"><input aria-label="${esc(c.name)} brightness" type="range" min="1" max="100" value="${Math.max(1,Math.round(pct ?? 100))}" oninput="previewPercent(this)" onchange="setLevel('${encodeURIComponent(c.name)}',this.value)"><span class="percent">${pct == null ? '—' : Math.round(pct)+'%'}</span></div>${toggle}</div>` : `<div class="control">${toggle}</div>`;
+    const control = dim ? `<div class="control"><div class="range-wrap"><input aria-label="${esc(c.name)} brightness" type="range" min="1" max="100" value="${Math.max(1,Math.round(pct == null ? 100 : pct))}" oninput="previewPercent(this)" onchange="setLevel('${encodeURIComponent(c.name)}',this.value)"><span class="percent">${pct == null ? '—' : Math.round(pct)+'%'}</span></div>${toggle}</div>` : `<div class="control">${toggle}</div>`;
     const sending = p ? `<span class="sending">Sending…</span>` : '';
     return `<div class="circuit"><button class="fav ${fav?'on':''}" title="${fav?'Remove from':'Add to'} favorites" onclick="toggleFavorite('${esc(nameKey(c)).replace(/'/g,"\\'")}')">${fav?'★':'☆'}</button><div class="circuit-name">${typeof c.temperature === 'number' ? `<strong class="with-chip"><span>${esc(c.name)}</span>${tempChip(c)}</strong>` : `<strong>${esc(c.name)}</strong>`}<small title="${esc(alsoDrives(c))}">${esc(c.masterCategory || 'CZone')}${outputLabel(c) ? ' · ' + esc(outputLabel(c)) : ''}</small></div><div class="tags"><span class="tag">${esc(c.masterCategory || 'CZone')}</span>${cats}</div><div><div class="status ${on?'on':''}"><span class="status-dot"></span>${on?'ON':'OFF'} ${sending}</div>${control}</div><button type="button" class="arrow trend-arrow" title="Current trend" aria-label="${esc(c.name)} current trend" onclick="window.czoneMonitor && window.czoneMonitor.trendPath('electrical.czone.${esc(c.slug)}.current')">›</button></div>`;
   }

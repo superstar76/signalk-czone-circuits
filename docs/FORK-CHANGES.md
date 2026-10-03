@@ -238,10 +238,10 @@ Changes to Matt's files:
 | Switch pane, both directions | yes | yes |
 | Pane state after a restart | not re-checked | yes, three restarts |
 | State with no status table | does not apply | yes |
-| DC meters matched by type | grouping yes (5V System - MI under Converters) | yes (House Battery, Solar) |
+| DC meters matched by type | grouping yes (5V System - MI under Converters) | yes (House Battery from the BMS, Start Battery, Solar, Alternator) |
 | AC from 127503 / 127504 | does not apply | yes |
 | Categories, hidden circuits, category list | not re-checked | yes |
-| Temperature in the label and webapp | not re-checked | Freezer yes; Fridge sensor not on the bus |
+| Temperature in the label and webapp | not re-checked | yes (Freezer and Fridge) |
 
 The bench had the builds of 3 October installed that evening; rows marked "not re-checked" are still to be confirmed there.
 
@@ -257,7 +257,7 @@ Measured on Compass Rose, plugin off against plugin on: Signal K at about 41 % a
 - **Per-display permissions** are not respected: a circuit that only one display may switch off can be switched off from the webapp and the pane.
 - **Pane order** is alphabetical; Victron has no setting for it.
 - **The GX unit setting** reads empty on Compass Rose and is treated as °C. What it reads when set to Fahrenheit has not been seen.
-- **Compass Rose:** several Victron devices share DC instances 0 and 1; the plugin picks the right ones, the MFD does not. Renumbering and the Fridge temperature tag wait for the NGT-1.
+- **Compass Rose:** the Victron DC instances were renumbered on 3 October (Start Battery 2, Alternator 4, Solar 7) and the Fridge temperature tag corrected, so each meter now has its own instance. House Battery (instance 0) is still sent by several devices; the plugin takes the BMS.
 - **Signal K 2.27 admin page:** a plugin's settings sometimes will not reopen without a page refresh. This is a Signal K fault, fixed in 2.33.
 - **Parked from the bench:** units from the ZCF, RGB circuits, a Node-RED palette, the occasional current drop-out.
 
