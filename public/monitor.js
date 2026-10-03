@@ -131,7 +131,7 @@
     pill.title = trend.detail || trend.dir || ''
     pill.querySelector('span').textContent = trend.available
       ? `Trending ${trend.trending || 0} values · every ${trend.sampleSeconds || 10} s · ${trend.location !== 'removable' ? 'on disk' : trend.mount && /\/(sd|usb)/.test(trend.mount) ? 'on USB' : 'on SD card'}${typeof trend.freeBytes === 'number' ? ` · ${(trend.freeBytes / 1073741824).toFixed(1)} GB free` : ''}`
-      : trend.reason === 'no_sd_card' ? 'No SD card or USB stick: trends off' : trend.reason === 'write_failed' ? 'SD card read-only: trends off' : 'Trends unavailable'
+      : trend.reason === 'no_sd_card' ? 'No SD card or USB stick: trends off' : trend.reason === 'write_failed' ? 'Card found but not writable: trends off' : 'Trends unavailable'
   }
   function schedule () {
     clearTimeout(pollTimer)

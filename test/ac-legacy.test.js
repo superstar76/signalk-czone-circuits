@@ -43,6 +43,19 @@ const hex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join(' ')
   // Not available fields are left out; a packet with no lines says nothing.
   const na = payload(0, 0, 0, 0, 0); na.writeUInt16LE(0xFFFF, 5); na.writeUInt32LE(0xFFFFFFFF, 11)
   assert.deepStrictEqual(decodeSensorPacket(127504, na).map(v => v.key), ['acVoltage:0:0', 'acFrequency:0:0'])
+  // Out of range / error (one below not available) is not a reading either:
+  // the bench showed AC output power as 4294967294 W from time to time.
+  for (const marker of [0xFFFFFFFE, 0xFFFFFFFD]) {
+    const bad = payload(1, 215.4, 8.2, 50.1, 0); bad.writeUInt32LE(marker, 11)
+    assert.deepStrictEqual(decodeSensorPacket(127504, bad).map(v => v.key), ['acVoltage:1:0', 'acCurrent:1:0', 'acFrequency:1:0'])
+  }
+  {
+    const { decodeSensorFrame } = require('../lib/monitor/sensors')
+    const f = Buffer.from([0x01, 0x01, 0x52, 0x00, 0xFE, 0xFF, 0xFF, 0x7F]) // 127744: 8.2 A, power out of range
+    assert.deepStrictEqual(decodeSensorFrame(127744, f), [{ key: 'acCurrent:1:0', value: 8.2 }])
+    const b = Buffer.from([0x00, 0xFE, 0x7F, 0x21, 0x00, 0xFE, 0xFF, 0xFF]) // 127508: voltage out of range, 3.3 A
+    assert.deepStrictEqual(decodeSensorFrame(127508, b), [{ key: 'batteryCurrent:0:0', value: 3.3 }])
+  }
   const none = payload(0, 230, 1, 50, 230); none[1] = 0
   assert.deepStrictEqual(decodeSensorPacket(127504, none), [])
   assert(sensorRank(127504) > sensorRank(127747))

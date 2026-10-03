@@ -149,7 +149,19 @@ Only matters if you start using meters (we use them for monitoring in the fork).
 - **Status:** not fully diagnosed. It may be how Signal K routes a PUT to a handler registered with a source (`PLUGIN_ID`).
 - **Worth testing:** a PUT via REST, `PUT /signalk/v1/api/vessels/self/electrical/czone/Light_1/switch/state` `{"value": true}`, since other apps (KIP, Node-RED) would use that.
 
-## 9. Earlier items, for completeness
+## 9. Smaller points from this week
+
+**New. None is urgent; the first two are changes we made in your files that you may want.**
+
+- **Settings panel gives no sign that it saved.** Every control saves as it is changed and Signal K restarts the plugin, but nothing says so. In our fork `public/remoteEntry.js` has a line under the heading ("Changes on this page are saved as you make them") and a green "Saved" notice for a few seconds after each change.
+- **Category list in the webapp.** It listed every category on every tab. In our fork `public/index.html` lists only the categories of the circuits in the current tab (AC, DC, In Use, Favorites), with counts for that tab, and a category narrows the tab instead of leaving it; a second click clears it.
+- **Logging cost.** `log()` builds its message even when debug is off. One 65284 status frame on Compass Rose produces about 25 messages (2.4 KB of strings), a few times a second. Cheap, but constant on a Cerbo; a debug-enabled check before building the string would remove it.
+- **Every bus frame is fully parsed** by `parseRawLine` before its PGN is looked at (our monitor's own listener does the same; that goes in our clean-up). About 1 µs per frame on a desktop. Reading the PGN from the CAN id first would skip the data parsing for everything that is not CZone.
+- **For information, not yours:**
+  - **Load:** on Compass Rose's Cerbo, Signal K sits at about 40 to 45 % CPU with the plugin off or on; the difference is within the noise. The Cerbo is near its limit with Signal K, Node-RED and the other apps, not because of the plugin.
+  - **Signal K 2.27 admin page:** a plugin's settings sometimes will not reopen without a page refresh. It is a stale click handler in the admin UI's plugin list, fixed by 2.33.
+
+## 10. Earlier items, for completeness
 
 - **Modes vs group circuits (SugarShack):** "All Lights On", "Welcome Home" and so on are ordinary multi-output circuits in the file. The four real Modes are the category-0 records.
 - **`signalk-czone` current mapping:** it was mapping currents to the previous circuit's output (old parser). Commit `e67c29d` moved it to the structural parser, which should fix it; not yet re-checked live. Our fork decodes circuit current inside `signalk-czone-circuits` (see `FORK-CHANGES.md`), which may be useful when you combine the two projects.

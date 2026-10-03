@@ -53,6 +53,7 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
 
 - **Retention:** kept until storage runs low. Then the oldest full-detail days go first and summaries last, so recording never stops. An optional setting caps full detail at 31, 90 or 365 days.
 - **Where:** on a Victron GX, an SD card or USB stick only, never internal flash; with no card, nothing is written or held in memory. On other systems, the Signal K data folder. A "Trend folder" setting overrides both. Minimum card: 16 GB.
+- **One manual step on a GX:** Venus OS mounts a FAT card writable by root only, and Signal K runs as the `signalk` user, so a new card shows "Card found but not writable". The card has to be mounted with `umask=0000`; FAT only takes that at mount time, and the VRM logger holds the card, so `docs/venus-sdcard-rw.sh` stops the logger, remounts and restarts it. Copy it to `/data/sdcard-rw.sh` and add `/data/sdcard-rw.sh &` to `/data/rc.local`. The plugin cannot do this itself because it does not run as root.
 - **Chart:** an in-page panel with 1 h, 24 h, 7 d, 31 d, 90 d, 1 y or a custom from/to period; now/min/avg/max; a hover crosshair; gaps where data is missing. Periods over 48 hours draw the average with a min–max band, so short spikes stay visible.
 - **Several values on one chart:** "Add value" puts any other trended value on the chart, up to five. Each unit gets its own scale; "Stacked" shows one plot per unit on the same time axis.
 - **Earlier history:** data already on the card from the February plugin is read in place. Old folder names are matched automatically where possible; others are mapped in `aliases.json` in the trend folder. Compass Rose's history back to late September is readable this way.
@@ -232,17 +233,17 @@ Changes to Matt's files:
 | Feature | Bench | Compass Rose |
 |---|---|---|
 | Monitoring tab, wired and third-party meters | yes | yes |
-| Trends on an SD card | not yet: no card fitted | yes, with February's history |
+| Trends on an SD card | yes, once the card was made writable (3 October) | yes, with February's history |
 | Circuit current | yes (130822 / 130817) | yes (130825) |
 | Switch pane, both directions | yes | yes |
 | Pane state after a restart | not re-checked | yes, three restarts |
 | State with no status table | does not apply | yes |
-| DC meters matched by type | not re-checked | yes (House Battery, Solar) |
+| DC meters matched by type | grouping yes (5V System - MI under Converters) | yes (House Battery, Solar) |
 | AC from 127503 / 127504 | does not apply | yes |
 | Categories, hidden circuits, category list | not re-checked | yes |
 | Temperature in the label and webapp | not re-checked | Freezer yes; Fridge sensor not on the bus |
 
-The bench has not had the builds of 3 October installed.
+The bench had the builds of 3 October installed that evening; rows marked "not re-checked" are still to be confirmed there.
 
 ## 11. Load on the Cerbo
 
