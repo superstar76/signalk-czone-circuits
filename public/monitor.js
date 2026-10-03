@@ -61,10 +61,10 @@
         <label class="mon-check"><input type="checkbox" id="monShowAll"> Show unmapped</label>
       </div>
       <div class="mon-card-fix" id="monCardFix" hidden>
-        <strong>Trends are off: the GX will not let Signal K write to this card yet.</strong>
+        <strong id="monCardFixHead"></strong>
         <ol>
           <li><a href="${API}/trend/card-setup" download="venus-data.tgz">Download venus-data.tgz</a></li>
-          <li>Take the card out, copy the file onto it (not into a folder) with a computer, and put the card back</li>
+          <li id="monCardFixCopy"></li>
           <li>Restart the GX. Trends start by themselves, and keep working after updates</li>
         </ol>
       </div>
@@ -139,7 +139,19 @@
     pill.classList.toggle('ok', !!trend.available)
     pill.title = trend.detail || trend.dir || ''
     const fix = document.querySelector('#monCardFix')
-    if (fix) fix.hidden = !(trend.available === false && trend.reason === 'write_failed' && trend.mount)
+    // On a GX: a card that is there but closed to Signal K, or no card yet.
+    // Either way the owner needs the setup file, so offer it in both cases.
+    const closed = trend.available === false && trend.reason === 'write_failed' && !!trend.mount
+    const none = trend.available === false && trend.reason === 'no_sd_card'
+    if (fix) {
+      fix.hidden = !(closed || none)
+      fix.querySelector('#monCardFixHead').textContent = closed
+        ? 'Trends are off: the GX will not let Signal K write to this card yet.'
+        : 'Trends need an SD card or USB stick in the GX (16 GB or larger). Before fitting it:'
+      fix.querySelector('#monCardFixCopy').textContent = closed
+        ? 'Take the card out, copy the file onto it (not into a folder) with a computer, and put the card back'
+        : 'Copy the file onto the card (not into a folder) with a computer, and put the card in the GX'
+    }
     pill.querySelector('span').textContent = trend.available
       ? `Trending ${trend.trending || 0} values · every ${trend.sampleSeconds || 10} s · ${trend.location !== 'removable' ? 'on disk' : trend.mount && /\/(sd|usb)/.test(trend.mount) ? 'on USB' : 'on SD card'}${typeof trend.freeBytes === 'number' ? ` · ${(trend.freeBytes / 1073741824).toFixed(1)} GB free` : ''}`
       : trend.reason === 'no_sd_card' ? 'No SD card or USB stick: trends off' : trend.reason === 'write_failed' ? 'Card found but not writable: trends off' : 'Trends unavailable'

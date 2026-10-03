@@ -55,7 +55,7 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
 
 - **Retention:** kept until storage runs low. Then the oldest full-detail days go first and summaries last, so recording never stops. An optional setting caps full detail at 31, 90 or 365 days.
 - **Where:** on a Victron GX, an SD card or USB stick only, never internal flash; with no card, nothing is written or held in memory. On other systems, the Signal K data folder. A "Trend folder" setting overrides both. Minimum card: 16 GB.
-- **One file on the card for a GX, and no login.** Venus OS mounts a FAT card writable by root only, and Signal K runs as the `signalk` user, so the plugin can see a new card but not write to it. The plugin cannot change that itself. Venus OS, though, unpacks a file called `venus-data.tgz` from a card at boot and runs a hook from it. So when a card is found but not writable, the Monitoring tab says so and gives three steps: download `venus-data.tgz` from the link there, copy it onto the card with a computer, restart the GX. From then on the GX opens the card for Signal K at every start, including after a firmware update. Nobody has to log in to the GX.
+- **One file on the card for a GX, and no login.** Venus OS mounts a FAT card writable by root only, and Signal K runs as the `signalk` user, so the plugin can see a new card but not write to it. The plugin cannot change that itself. Venus OS, though, unpacks a file called `venus-data.tgz` from a card at boot and runs a hook from it. So when there is no card yet, or a card is found but not writable, the Monitoring tab says so and gives three steps: download `venus-data.tgz` from the link there, copy it onto the card with a computer, restart the GX. From then on the GX opens the card for Signal K at every start, including after a firmware update. Nobody has to log in to the GX.
   - **What the file does:** puts `sdcard-rw.sh` in `/data` and adds one line to `/data/rc.local` to run it at boot. The script mounts each FAT card or stick again with open permissions, stopping the VRM logger for the moment that takes, and does nothing when the card is already open.
   - **How far it is tested:** the archive, both scripts and the download are covered by `npm test` (the scripts in a dry run against mount tables copied from the bench). The original, simpler script was pasted in by hand on the bench Cerbo and works there. The file-on-the-card route itself has not yet been run on a GX.
   - **With no card at all** the pill says "No SD card or USB stick: trends off".
@@ -252,6 +252,7 @@ lib/zcf-circuits.js       structural circuit parser (with the hidden-duplicate r
 lib/zcf-monitor.js        meters, meter settings, inputs
 public/monitor.js         Monitoring tab and trend panel
 public/monitor.css
+docs/INSTALL-AND-USE.md   installation and use, for the person fitting or using the plugin
 docs/ZCF-FORMAT.md        layouts, checked across the sample ZCFs
 docs/venus-sdcard-rw.sh   a copy of the card script, for reading
 test/                     10 new test files, 2 new ZCF fixtures
@@ -323,6 +324,7 @@ The chartplotter view adds a second plugin, `signalk-navico-embedder`, which con
 ## 13. Before opening the pull request
 
 - [ ] Leave `docs/HANDOVER-czone-signalk.md` and `docs/BRIEF-FOR-MATT.md` out. They are working notes and name customer boats.
+- [ ] `docs/INSTALL-AND-USE.md` goes in: it names no boats. Rewrite its install section once the plugin is in the Appstore.
 - [ ] Merge Matt's latest `main` and do the clean-up pass.
 - [ ] If his parser has the hidden-duplicate rule, use it and drop `lib/zcf-circuits.js`.
 - [ ] Remove the two leftover `status-fallback` files on GitHub.
