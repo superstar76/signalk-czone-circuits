@@ -194,7 +194,7 @@ Setting it up, in **Plugin Config → Navico MFD Embedder**:
 3. **Authentication:** set the level to **Admin** and press **Generate Authentication Token**; approve the request under **Security → Access Requests** in a second browser tab, then return and press **Save Configuration**.
 4. **Client IP whitelist:** add the plotter's IP address, so only the plotter can use that login.
 
-A **CZone Circuits** tile then appears on the plotter. On the plotter the page uses a touch layout with larger rows and buttons. To move through the list, use the up and down buttons at the right edge, or drag the list.
+A **CZone Circuits** tile then appears on the plotter. On the plotter the page uses a touch layout with larger rows and buttons. To move through the list, drag it with a finger.
 
 Notes:
 

@@ -128,7 +128,7 @@ An opt-in setting registers the circuits with the GX as `com.victronenergy.switc
 A Navico plotter (B&G, Simrad, Lowrance) on the same Ethernet network as Signal K can show the webapp as a tile. The plotter's browser is Chromium 69 and cannot run Signal K's pages as they are, so the tile comes from another plugin, `signalk-navico-embedder`, which converts pages on the way through and supplies the login token.
 
 - **Layout:** the page recognises the plotter (the plotter's own parameters on the address, or the embedder's token) and switches to a touch layout: larger rows and buttons, no banner, the category and status chips dropped, drawn icons in place of symbol characters the plotter's fonts lack. A desktop browser never sees it; `?layout=mfd` shows it for testing.
-- **Scrolling:** the plotter's touch arrives as mouse events, so a drag selected text and nothing scrolled. Two ways are now offered: page-up and page-down buttons at the right edge, and dragging the list or the left column, where the release is not taken as a tap. On the first try on the plotter the drag worked but lagged the finger by about a second, so the page buttons were added, drag positions are applied once per frame, redraws caused by live data wait while a finger is down, and the plotter styles were made cheap to draw (no shadows, gradients or transitions).
+- **Scrolling:** the plotter's touch arrives as mouse events, so a drag selected text and nothing scrolled. Dragging the list or the left column now scrolls it, and the release is not taken as a tap. On the first try on the plotter the drag worked but lagged the finger by about a second. So drag positions are applied once per frame, redraws caused by live data wait while a finger is down, and the plotter styles were made cheap to draw (no shadows, gradients or transitions). With those the drag follows the finger well on Compass Rose. Page-up and page-down buttons were added as a fallback at the same time and removed again once the drag was confirmed.
 - **Updates reach the plotter by themselves:** the plotter kept showing the page it first loaded until it was restarted. The page now checks once a minute whether its script has changed on the server and reloads once if so.
 - **A readout for diagnosis:** five taps on the "Connected" line show the last input events the plotter sent, the frame time and the time to redraw the list. There is no other way to see inside that browser.
 - **Compatibility:** the page's own script avoids syntax newer than that browser (the embedder converts separate script files but not the code inside a page).
@@ -299,7 +299,9 @@ The webapp pages are not covered by `npm test`. They were checked by hand in a c
 | Instruments state from its own load | does not apply | installed; not yet confirmed against the boat |
 | Chartplotter tile (loads, live state, switching) | no plotter | yes (NSS evo3S) |
 | Chartplotter touch layout | no plotter | yes |
-| Chartplotter scrolling | no plotter | drag works but lags; page buttons and smoother drag built, not yet tried |
+| Chartplotter scrolling by drag | no plotter | yes |
+| No flicker of ON buttons on the plotter | no plotter | yes |
+| GX Outputs list steady against small wobbles in current | not yet confirmed there | yes (still moves on a change of 0.2 A or more, which renames the switch) |
 
 The bench was updated on the evening of 3 October; rows marked "not re-checked" or "not yet confirmed" are still to be checked there. Both Cerbos have Tailscale, so either can be reached from the other site.
 
