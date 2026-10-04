@@ -31,6 +31,14 @@
 .mon-subhead { display:flex; align-items:center; gap:10px; padding:11px 15px; background:rgba(15,34,55,.65); border-bottom:1px solid rgba(148,193,235,.10); }
 .mon-subhead strong { font-size:13px; letter-spacing:.2px; }
 .mon-subhead .subtle { color:var(--muted); font-size:11px; margin-left:auto; }
+/* [fork] The heading is set apart from its rows, quietly: a faint tint of
+   the webapp's accent blue (the same on every group) with a faint line of it
+   underneath, and the rows indented under it. Drawn with overlays, not
+   colour functions, so the chartplotter's older browser shows the same. */
+.mon-subhead { position:relative; }
+.mon-subhead:before { content:''; position:absolute; top:0; right:0; bottom:0; left:0; background:var(--blue); opacity:.045; pointer-events:none; }
+.mon-subhead:after { content:''; position:absolute; right:0; bottom:-1px; left:0; height:1px; background:var(--blue); opacity:.16; pointer-events:none; }
+.circuit.mon-row { padding-left:41px; }
 
 /* Coloured group icon, like the category cards */
 .mon-icon { width:30px; height:30px; border-radius:10px; display:grid; place-items:center; font-size:15px; background:color-mix(in srgb, var(--cat) 16%, transparent); color:var(--cat); }
@@ -134,6 +142,7 @@
   .mon-row.multi .mon-values { justify-content:flex-start; }
   .mon-row .arrow { display:none; }
   .mon-row .mon-icon { width:26px; height:26px; font-size:13px; }
+  .circuit.mon-row { padding-left:29px; }
 }
 
 /* Circuit list: the arrow beside ON/OFF opens that circuit's current trend */
@@ -149,7 +158,7 @@
 /* [fork] Chartplotter (see the .mfd notes in index.html): its browser has no
    flex gap, so the spacing is given as margins, and the touch targets grow. */
 .mfd .mon-head-icon { display:none; }
-.mfd .circuit.mon-row { grid-template-columns:44px minmax(0,1fr) auto auto 34px; }
+.mfd .circuit.mon-row { grid-template-columns:44px minmax(0,1fr) auto auto 34px; padding-left:38px; }
 .mfd .mon-icon { background:rgba(120,170,220,.14); }
 .mfd .mon-subhead strong { font-size:15px; }
 .mfd .mon-subhead .subtle { font-size:12px; }
