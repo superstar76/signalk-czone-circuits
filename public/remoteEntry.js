@@ -299,6 +299,22 @@ var signalk_czone_circuits = (function () {
       ),
 
       React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
+        React.createElement('label', null,
+          React.createElement('input', { type: 'checkbox', checked: configuration.victronSwitches === true, disabled: busy, onChange: function (e) { setVictronSwitches(e.target.checked) } }),
+          ' Show CZone circuits in the Victron switch pane'
+        ),
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Venus OS 3.60 or newer. Adds every circuit to the GX switch pane and VRM, one card per CZone category. Switching from the pane also needs NMEA 2000 sending allowed above.'),
+        React.createElement('label', { style: { display: 'block', marginTop: 8 } },
+          React.createElement('input', { type: 'checkbox', checked: configuration.victronSwitchCurrent !== false, disabled: busy || configuration.victronSwitches !== true, onChange: function (e) { setVictronSwitchCurrent(e.target.checked) } }),
+          ' Show circuit current in the switch label (e.g. "Light 1 (1.5 A)")'
+        ),
+        React.createElement('label', { style: { display: 'block', marginTop: 8 } },
+          React.createElement('input', { type: 'checkbox', checked: configuration.victronSwitchTemperature !== false, disabled: busy || configuration.victronSwitches !== true, onChange: function (e) { setVictronSwitchTemperature(e.target.checked) } }),
+          ' Show temperature in the switch label where an input is named after the circuit (e.g. "Freezer (-8.2 °C, 2.9 A)")'
+        )
+      ),
+
+      React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
         React.createElement('strong', null, 'Confirm before turning off'),
         React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'For circuits that must not go off by a slip of a finger: freezers and fridges, instruments, anything that powers the GX, the network or a display. The webapp and its chartplotter view ask "are you sure?" before turning one of these off. Turning on is never held up. CZone keypads and displays are not affected.'),
         confirmOffList().map(function (e, i) {
@@ -322,22 +338,6 @@ var signalk_czone_circuits = (function () {
           ' Let the Victron switch pane and other apps turn these circuits off'
         ),
         React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'The Victron switch pane and other Signal K apps cannot ask "are you sure?". Unticked, an off from them is not acted on and the switch returns to on. The circuit can still be turned off from the webapp, a chartplotter or a CZone keypad.')
-      ),
-
-      React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
-        React.createElement('label', null,
-          React.createElement('input', { type: 'checkbox', checked: configuration.victronSwitches === true, disabled: busy, onChange: function (e) { setVictronSwitches(e.target.checked) } }),
-          ' Show CZone circuits in the Victron switch pane'
-        ),
-        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Venus OS 3.60 or newer. Adds every circuit to the GX switch pane and VRM, one card per CZone category. Switching from the pane also needs NMEA 2000 sending allowed above.'),
-        React.createElement('label', { style: { display: 'block', marginTop: 8 } },
-          React.createElement('input', { type: 'checkbox', checked: configuration.victronSwitchCurrent !== false, disabled: busy || configuration.victronSwitches !== true, onChange: function (e) { setVictronSwitchCurrent(e.target.checked) } }),
-          ' Show circuit current in the switch label (e.g. "Light 1 (1.5 A)")'
-        ),
-        React.createElement('label', { style: { display: 'block', marginTop: 8 } },
-          React.createElement('input', { type: 'checkbox', checked: configuration.victronSwitchTemperature !== false, disabled: busy || configuration.victronSwitches !== true, onChange: function (e) { setVictronSwitchTemperature(e.target.checked) } }),
-          ' Show temperature in the switch label where an input is named after the circuit (e.g. "Freezer (-8.2 °C, 2.9 A)")'
-        )
       ),
 
       React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },

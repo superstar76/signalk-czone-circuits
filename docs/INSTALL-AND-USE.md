@@ -114,7 +114,7 @@ Both can be shown with a setting (section 8). Their state is still published to 
 Some circuits should not go off by a slip of a finger: a freezer of long-term stores, or the circuit that powers the display you are using. You choose which, in the settings (section 8, **Confirm before turning off**): pick the circuit from the list.
 
 - **In the webapp and on a chartplotter**, the circuit shows a padlock after its name. Turning it off asks "Turn off Freezer?". Press **Keep on** or **Turn off**. Turning it on never asks.
-- **A Mode** that would turn one of these circuits off asks in the same way, where the plugin can tell which circuits the Mode switches.
+- **Modes are not held up.** If a Mode turns one of these circuits off, it goes off. To keep a circuit on in a Mode, take it out of that Mode in the CZone Configuration Tool.
 - **The Victron switch pane and other apps** cannot ask a question, so they cannot turn these circuits off: the switch goes back to on. They can still turn them on. If you would rather they could turn them off, tick **Let the Victron switch pane and other apps turn these circuits off**.
 - **CZone keypads and displays** work as they always have.
 

@@ -125,20 +125,15 @@ function run (fixture, settings) {
   t.plugin.stop()
 }
 
-// --- A mode that turns a nominated circuit off (SugarShack) ----------------
+// --- Modes are not held up (SugarShack: Sleep turns Instruments off) --------
 {
   const t = run('SugarShack-20260927-01.zcf', { confirmOff: [{ circuit: 'Instruments' }] })
-  let sent = t.emitted.length
-  let r = t.call('post', '/modes/:name/activate', { name: 'Sleep' })
-  assert.strictEqual(r.status, 409)
-  assert.strictEqual(r.body.needsConfirm, true)
-  assert.deepStrictEqual(r.body.turnsOff, ['Instruments'])
-  assert.strictEqual(t.emitted.length, sent)
-  r = t.call('post', '/modes/:name/activate', { name: 'Sleep' }, { confirm: '1' })
+  const sent = t.emitted.length
+  const r = t.call('post', '/modes/:name/activate', { name: 'Sleep' })
   assert.strictEqual(r.status, 200)
   assert(t.emitted.length > sent)
-  // A mode that leaves it alone is not held up.
-  assert.strictEqual(t.call('post', '/modes/:name/activate', { name: 'Night Cruising' }).status, 200)
+  // ... while the circuit's own button still asks.
+  assert.strictEqual(t.off('Instruments').status, 409)
   t.plugin.stop()
 }
 

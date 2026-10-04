@@ -239,24 +239,6 @@ module.exports = function (app) {
     throw new Error(`"${circuit.name.trim()}" is set to confirm before turning off. Turn it off from the CZone Circuits webapp, a chartplotter or a CZone keypad.`)
   }
 
-  // The nominated circuits a mode would turn off: those that are on, or whose
-  // state is not known.
-  function modeTurnsOff (mode) {
-    if (!mapping || !confirmOff.size) return []
-    const out = []
-    for (const action of mode.actions || []) {
-      if (Number(action.valuePercent) > 0) continue
-      const target = modeTargetKey(action.target)
-      if (!target) continue
-      for (const c of mapping.circuits) {
-        if (!confirmOff.has(c.name) || circuitModeTargetKey(c) !== target || out.includes(c)) continue
-        const st = runtimeState.get(c.name)
-        if (!st || st.state !== 'OFF') out.push(c)
-      }
-    }
-    return out
-  }
-
   const registeredPutPaths = new Set()
 
   function modeByName (name) {
@@ -1032,6 +1014,24 @@ module.exports = function (app) {
           default: false,
           description: 'Circuits that only drive CZone virtual switches (VS 01, VS 02, …) are hidden from the webapp and the Victron switch pane unless this is ticked.'
         },
+        victronSwitches: {
+          type: 'boolean',
+          title: 'Show CZone circuits in the Victron switch pane',
+          default: false,
+          description: 'Venus OS 3.60+ only. Adds every circuit to the GX switch pane (and VRM), grouped by CZone category. Switching from the pane still needs NMEA 2000 sending enabled.'
+        },
+        victronSwitchTemperature: {
+          type: 'boolean',
+          title: 'Show temperature in the switch label',
+          default: true,
+          description: 'Where a temperature input is named after a circuit ("Freezer" and "Freezer Temperature"), its switch reads e.g. "Freezer (-8.2 °C, 2.9 A)", in the temperature unit set on the GX.'
+        },
+        victronSwitchCurrent: {
+          type: 'boolean',
+          title: 'Show circuit current in the switch label',
+          default: true,
+          description: 'While a circuit is on, its switch reads e.g. "Light 1 (1.5 A)". The Venus OS switch pane does not display current itself yet.'
+        },
         confirmOff: {
           type: 'array',
           title: 'Confirm before turning off',
@@ -1055,24 +1055,6 @@ module.exports = function (app) {
           title: 'Let the Victron switch pane and other apps turn those circuits off',
           default: false,
           description: 'The Victron switch pane and other Signal K apps cannot ask "are you sure?". Unticked, an off from them is not acted on and the switch returns to on; the circuit can still be turned off from the webapp, a chartplotter or a CZone keypad.'
-        },
-        victronSwitches: {
-          type: 'boolean',
-          title: 'Show CZone circuits in the Victron switch pane',
-          default: false,
-          description: 'Venus OS 3.60+ only. Adds every circuit to the GX switch pane (and VRM), grouped by CZone category. Switching from the pane still needs NMEA 2000 sending enabled.'
-        },
-        victronSwitchTemperature: {
-          type: 'boolean',
-          title: 'Show temperature in the switch label',
-          default: true,
-          description: 'Where a temperature input is named after a circuit ("Freezer" and "Freezer Temperature"), its switch reads e.g. "Freezer (-8.2 °C, 2.9 A)", in the temperature unit set on the GX.'
-        },
-        victronSwitchCurrent: {
-          type: 'boolean',
-          title: 'Show circuit current in the switch label',
-          default: true,
-          description: 'While a circuit is on, its switch reads e.g. "Light 1 (1.5 A)". The Venus OS switch pane does not display current itself yet.'
         }
       }
     }),
@@ -1334,12 +1316,6 @@ module.exports = function (app) {
       router.post('/modes/:name/activate', (req, res) => {
         try {
           const mode = modeByName(req.params.name)
-          // [fork] a mode that turns off a circuit nominated to confirm before off
-          const turnsOff = confirmedBy(req) ? [] : modeTurnsOff(mode)
-          if (turnsOff.length) {
-            res.status(409).json({ ok: false, needsConfirm: true, mode: mode.name, turnsOff: turnsOff.map(c => c.name.trim()), error: `Mode "${mode.name}" turns off ${turnsOff.map(c => c.name.trim()).join(', ')}, set to confirm before turning off. Reload this page to be asked.` })
-            return
-          }
           const line = sendMode(mode)
           res.json({
             ok: true,
