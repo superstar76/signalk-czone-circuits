@@ -90,7 +90,10 @@
       <div class="mon-stats" id="monStats"></div>
       <div class="mon-legend" id="monLegend"></div>
       <div class="mon-chart"><canvas id="monCanvas"></canvas><div class="mon-tip" id="monTip"></div><div class="mon-chart-msg" id="monMsg"></div></div>`
-    main.insertBefore(panel, section)
+    // [fork] Above the first list on the page, so a trend opens at the top
+    // whichever tab it is opened from (it used to sit between the circuit list
+    // and the Monitoring list: top of Monitoring, bottom of the circuit tabs).
+    main.insertBefore(panel, main.querySelector('.section') || section)
     panel.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeTrend() })
     panel.querySelector('#monReadings').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setPrimaryReading(b.dataset.key) })
     panel.querySelector('#monRanges').addEventListener('click', e => {
@@ -184,6 +187,9 @@
     const f = fmt(r.unit, r.value, r.path)
     const on = chart.open && chart.series.some(s => s.id === seriesId(item, r)) ? 'active' : ''
     const level = r.unit === 'ratio' && typeof r.value === 'number' ? `<span class="mon-level"><span style="width:${Math.max(0, Math.min(100, r.value * 100))}%"></span></span>` : ''
+    // [fork] A value box opens that value's trend, and so does the arrow at
+    // the end of the row. The rest of the row does not (a touch anywhere on
+    // it used to, by accident).
     const attrs = r.series ? `data-item="${esc(item.id)}" data-key="${esc(r.key)}" title="${esc(r.label)}: show trend"` : `title="${esc(r.label)}"`
     return `<div class="mon-value ${on} ${r.series ? 'clickable' : ''}" ${attrs}><span>${f.text}<small>${esc(f.unit)}</small></span>${level}</div>`
   }
@@ -203,11 +209,11 @@
     const shown = live ? item.readings.filter(r => r.path) : (p ? [p] : [])
     const active = chart.open && chart.series.some(s => s.item.id === item.id) ? 'active' : ''
     const clickable = p && trendKey(p)
-    return `<div class="circuit mon-row ${shown.length > 1 ? 'multi' : ''} ${live ? '' : 'unmapped'} ${active} ${clickable ? 'clickable' : ''}" style="--cat:${groupVar(g)}" ${clickable ? `data-item="${esc(item.id)}" data-key="${esc(p.key)}"` : ''}>
+    return `<div class="circuit mon-row ${shown.length > 1 ? 'multi' : ''} ${live ? '' : 'unmapped'} ${active}" style="--cat:${groupVar(g)}">
       <span class="mon-icon">${groupIcon(g)}</span>
       <div class="circuit-name"><strong>${esc(item.name)}</strong><small>${esc(sub)}</small></div>
       <div class="mon-right"><div class="status ${live ? 'on' : ''}"><span class="status-dot"></span>${live ? 'LIVE' : 'NOT ON BUS'}</div><div class="mon-values">${shown.map(r => valueBox(item, r)).join('')}</div></div>
-      <span class="arrow">${clickable ? '›' : ''}</span></div>`
+      ${clickable ? `<button type="button" class="arrow trend-arrow" title="Trend" aria-label="${esc(item.name)} trend" data-item="${esc(item.id)}" data-key="${esc(p.key)}">›</button>` : '<span class="arrow"></span>'}</div>`
   }
 
   // Circuit current is trended from the circuit list (arrow beside ON/OFF),

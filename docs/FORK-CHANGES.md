@@ -41,7 +41,8 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
 
 - **Grouping:** a DC meter goes under its DC Type from the Configuration Tool, so a solar meter is under Solar and not under Batteries.
 - **Live or not:** each row says LIVE or NOT ON BUS. A row that is not on the bus names the NMEA 2000 instance the ZCF expects ("Nothing is sending instance 3 on NMEA 2000"), which is the number to set on the sending device.
-- **Looks:** built from the webapp's own classes, so it matches the circuit list. Group colours are CSS variables.
+- **Looks:** built from the webapp's own classes, so it matches the circuit list. Group colours are CSS variables. A group heading carries a faint band of the accent blue and its rows are indented under it, so headings and rows are told apart at a glance.
+- **Opening a trend:** a value box opens that value's trend, and the arrow at the end of the row opens the item's. The rest of the row does nothing, so a stray touch does not open a chart.
 - **No false readings:** NMEA 2000 marks a field as "not available", "out of range" or "reserved" with its top values. None of them is shown as a reading; the last good value stays.
 
 ### 1.2 Trends
@@ -68,7 +69,7 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
 ### 1.3 Circuit current
 
 - **Shown** under ON on each circuit's button in the webapp, and in the Victron switch label.
-- **Trend:** the arrow beside ON/OFF opens that circuit's current trend.
+- **Trend:** the arrow beside ON/OFF opens that circuit's current trend. A trend opens at the top of the page whichever tab it is opened from.
 - **Decoded** from CZone's own output tables, 0.1 A resolution:
 
   | PGN | Sent by |

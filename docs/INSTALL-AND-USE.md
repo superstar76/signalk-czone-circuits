@@ -126,7 +126,7 @@ The **Monitoring** tab lists everything the CZone configuration monitors, groupe
 
 - **LIVE** means the value is arriving now.
 - **NOT ON BUS** means the configuration expects it but nothing is sending it. The row names the NMEA 2000 instance it is waiting for, for example "Nothing is sending instance 3 on NMEA 2000". Set that instance on the sending device and the row goes live. Tick **Show unmapped** to see these rows.
-- **Click a row** to open its trend.
+- **To open a trend**, press a value (that value's trend) or the arrow at the end of the row. The rest of the row does nothing, so a stray touch does not open a chart. The trend opens at the top of the page, from any tab.
 
 ## 5. Trends
 

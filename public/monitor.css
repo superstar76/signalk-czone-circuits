@@ -44,7 +44,6 @@
 .mon-icon { width:30px; height:30px; border-radius:10px; display:grid; place-items:center; font-size:15px; background:color-mix(in srgb, var(--cat) 16%, transparent); color:var(--cat); }
 
 /* Rows: the .circuit grid from the webapp */
-.mon-row.clickable { cursor:pointer; }
 .mon-row.unmapped { opacity:.5; }
 .mon-row.active { background:linear-gradient(90deg, color-mix(in srgb, var(--cat) 16%, transparent), transparent 70%); box-shadow:inset 3px 0 0 var(--cat); }
 /* LIVE stays the webapp's green on every group: amber reads as a fault. */
@@ -138,9 +137,11 @@
   .mon-leg-row { grid-template-columns:12px minmax(0,1fr) repeat(3,minmax(54px,auto)) 22px; gap:6px; padding:7px 8px; }
   .mon-leg-row .avg, .mon-leg-row.head .avg { display:none; }
   .mon-right { grid-column:3; }
-  .mon-row.multi .mon-right { grid-column:2 / 4; align-items:stretch; }
+  .mon-row.multi .mon-right { grid-column:2 / 5; align-items:stretch; }
   .mon-row.multi .mon-values { justify-content:flex-start; }
-  .mon-row .arrow { display:none; }
+  /* the arrow is the only way to a trend, so it stays on a phone: top right of the row */
+  .circuit.mon-row { grid-template-columns:30px minmax(0,1fr) auto 30px; }
+  .mon-row .arrow { grid-column:4; grid-row:1; }
   .mon-row .mon-icon { width:26px; height:26px; font-size:13px; }
   .circuit.mon-row { padding-left:29px; }
 }
@@ -158,7 +159,8 @@
 /* [fork] Chartplotter (see the .mfd notes in index.html): its browser has no
    flex gap, so the spacing is given as margins, and the touch targets grow. */
 .mfd .mon-head-icon { display:none; }
-.mfd .circuit.mon-row { grid-template-columns:44px minmax(0,1fr) auto auto 34px; padding-left:38px; }
+.mfd .circuit.mon-row { grid-template-columns:44px minmax(0,1fr) auto auto 48px; padding-left:38px; }
+.mfd .mon-row .trend-arrow { min-height:54px; }
 .mfd .mon-icon { background:rgba(120,170,220,.14); }
 .mfd .mon-subhead strong { font-size:15px; }
 .mfd .mon-subhead .subtle { font-size:12px; }
