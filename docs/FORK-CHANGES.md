@@ -21,6 +21,8 @@ Matt's plugin reads a CZone configuration file (ZCF), lists the circuits in a we
 
 The rule throughout: once the ZCF is uploaded, the data should appear. Where the bus is ambiguous (several devices on one instance), the ZCF decides.
 
+One addition is the installer's choice and not read from the ZCF: **confirm before turning off**, for the few circuits (a freezer, the instruments) that must not go off by a slip of a finger.
+
 ## 1. What is new for the person using it
 
 ### 1.1 Monitoring tab
@@ -137,6 +139,21 @@ A Navico plotter (B&G, Simrad, Lowrance) on the same Ethernet network as Signal 
 - **Setting it up:** the plotter and the Signal K machine must be on the same network segment. In the embedder: the IP override set to that machine's wired address, the CZone Circuits app enabled, and an admin token (the plugin's own interface needs a login). On Compass Rose the embedder's own "Generate" button did not deliver a token; one made with `signalk-generate-token` and written into the embedder's settings did. Restrict the embedder's client list to the plotter's address, since the token carries admin rights.
 - **The built-in Signal K tile is not this.** A GX running Venus OS Large advertises a Signal K tile to the plotter by itself, but it opens Signal K's admin page, which that browser cannot draw (a white screen on Signal K 2.27).
 
+### 1.9 Confirm before turning off
+
+Some circuits must not go off by a slip of a finger. Two cases raised it. On Compass Rose, Instruments powers the chartplotter, so turning Instruments off on the plotter takes the plotter with it, and it has to be brought back from a keypad. On Sel Citron, the cockpit freezers hold long-term stores and may not be opened for weeks, so a freezer turned off by accident is found too late; in his CZone configuration fridges and freezers can be turned on from any display but off only from the iPad.
+
+The plugin cannot work out which circuits these are: the ZCF says which output a circuit drives, not what is wired to it. So they are nominated, one by one, in the plugin's settings. It is not a general rule; a circuit that is not nominated switches exactly as before.
+
+- **Nominating:** under **Confirm before turning off** in the settings, a circuit is chosen from a list of the configuration's circuits. Nothing else is set.
+- **In the webapp and on the chartplotter:** a nominated circuit carries a small padlock after its name. Turning it off brings up the question "Turn off Freezer?" and two buttons, **Keep on** and **Turn off**, and nothing else. Turning it on is never held up.
+- **Against a double tap:** **Turn off** does not respond for the first half second, and the question appears in the middle of the screen, not under the finger. A tap outside the question, or Escape, keeps the circuit on.
+- **Enforced by the plugin, not only the page:** an off request without the confirmation is refused (409), so a page that loaded before the circuit was nominated asks too.
+- **Where no question can be asked:** the Victron switch pane and other Signal K apps (a PUT to the switch path) cannot ask. By default an off from them is not acted on and the pane's switch returns to on; turning on works. One setting lets them turn nominated circuits off after all.
+- **Modes:** a Mode that turns a nominated circuit off (and the circuit is on, or its state is not known) asks first in the webapp, naming the circuits. This relies on matching the Mode's actions to circuits, which works on SugarShack (23 of a Mode's 24 off-actions matched) and only partly on Meitaki (34 of 98), so on some configurations a Mode can still turn a nominated circuit off without asking.
+- **Not affected:** CZone's own keypads and displays, and a Mode activated from outside the webapp.
+- **Checked** in a current Chromium and in Chromium 69 (the plotter's version), and by the plugin's tests. Not yet installed on a boat, and the pane's switch returning to on has not been seen on a GX.
+
 ## 2. How readings are found with nothing configured
 
 - **The ZCF gives the identity.** Each meter and sender has an NMEA 2000 instance in the ZCF (and a source or fluid type for senders). The same numbers are in the standard PGNs on the bus.
@@ -185,6 +202,8 @@ These are in the brief for Matt, with evidence, for his parser.
 | Show temperature in the switch label | on |
 | Show virtual switch circuits | off |
 | Show circuits that are not on any CZone display | off |
+| Confirm before turning off (a list of circuits) | empty |
+| Let the Victron switch pane and other apps turn those circuits off | off |
 | Trend folder | automatic |
 | Trend sample rate | 10 seconds |
 | Keep full-detail trend data for | as long as there is space |
@@ -253,6 +272,7 @@ lib/monitor/venus/        the two scripts that go in it
 lib/monitor/wire.js       candump listener for third-party devices
 lib/victron/vedbus.js     minimal Victron D-Bus service
 lib/victron/switches.js   CZone circuits as GX switchable outputs
+lib/confirm-off.js        circuits nominated to confirm before off
 lib/fork-mapping.js       state fallback, categories and groups, hidden circuits, a circuit's own loads
 lib/zcf-circuits.js       structural circuit parser (with the hidden-duplicate rule)
 lib/zcf-monitor.js        meters, meter settings, inputs
@@ -261,23 +281,23 @@ public/monitor.css
 docs/INSTALL-AND-USE.md   installation and use, for the person fitting or using the plugin
 docs/ZCF-FORMAT.md        layouts, checked across the sample ZCFs
 docs/venus-sdcard-rw.sh   a copy of the card script, for reading
-test/                     11 new test files, 2 new ZCF fixtures
+test/                     12 new test files, 2 new ZCF fixtures
 ```
 
 Changes to Matt's files:
 
 | File | Lines | Change |
 |---|---|---|
-| `index.js` | +92, −4 | Create, start and stop the monitor; hand the switch pane the send functions and the decoded state; one call after `zcf.load()` to `fork-mapping`; `current`, `temperature` and `notShown` on `/circuits`; eight settings |
-| `public/index.html` | +235, −16 | Monitoring tab; amps under ON; trend arrow; temperature chip; category list that follows the tab; icons for the new categories; circuit label shows the circuit's own load, numbered as the Configuration Tool does; "not logged in" message; chartplotter layout (styles, drawn icons, drag-to-scroll), which is about 150 of the added lines |
-| `public/remoteEntry.js` | +101 | Controls for the eight settings; saved confirmation |
+| `index.js` | +180, −5 | Create, start and stop the monitor; hand the switch pane the send functions and the decoded state; one call after `zcf.load()` to `fork-mapping`; `current`, `temperature` and `notShown` on `/circuits`; confirm before off (off and Mode routes, PUT handlers, the pane's send functions); ten settings |
+| `public/index.html` | +446, −28 | Monitoring tab; amps under ON; trend arrow; temperature chip; category list that follows the tab; icons for the new categories; circuit label shows the circuit's own load, numbered as the Configuration Tool does; "not logged in" message; chartplotter layout (styles, drawn icons, drag-to-scroll, self-reload, diagnostic readout); lists updated in place; the confirm-before-off question and padlock |
+| `public/remoteEntry.js` | +152 | Controls for the ten settings, including the list of circuits that confirm before off; saved confirmation |
 | `package.json` | +4, −1 | `dbus-native` dependency; the new tests in `npm test` |
 
 ## 9. Tests
 
-`npm test` runs Matt's suite and the fork's, 23 files, all passing. The fork's tests use frames captured on the bench and on Compass Rose, and eight sample ZCFs (two bench, two Compass Rose, Meitaki, Persevere, Sel Citron, SugarShack).
+`npm test` runs Matt's suite and the fork's, 24 files, all passing. The fork's tests use frames captured on the bench and on Compass Rose, and eight sample ZCFs (two bench, two Compass Rose, Meitaki, Persevere, Sel Citron, SugarShack).
 
-The webapp pages are not covered by `npm test`. They were checked by hand in a current Chromium and, for the chartplotter layout, in Chromium 69.0.3494, the version the plotter runs: layout, drag scrolling of the list and of the left column, a drag from a button not switching it, a tap switching it, and the desktop page unchanged.
+The webapp pages are not covered by `npm test`. They were checked by hand in a current Chromium and, for the chartplotter layout, in Chromium 69.0.3494, the version the plotter runs: layout, drag scrolling of the list and of the left column, a drag from a button not switching it, a tap switching it, the desktop page unchanged, and the confirm-before-off question (asked, kept on, turned off, a page that did not know the circuit was nominated, and a Mode). The settings panel's new section was rendered and exercised in a current Chromium.
 
 ## 10. What has been confirmed where
 
@@ -301,6 +321,8 @@ The webapp pages are not covered by `npm test`. They were checked by hand in a c
 | Chartplotter touch layout | no plotter | yes |
 | Chartplotter scrolling by drag | no plotter | yes |
 | No flicker of ON buttons on the plotter | no plotter | yes |
+| Updates reach the plotter without a restart | no plotter | yes |
+| Confirm before turning off | not installed | not installed |
 | GX Outputs list steady against small wobbles in current | not yet confirmed there | yes (still moves on a change of 0.2 A or more, which renames the switch) |
 
 The bench was updated on the evening of 3 October; rows marked "not re-checked" or "not yet confirmed" are still to be checked there. Both Cerbos have Tailscale, so either can be reached from the other site.
@@ -316,7 +338,7 @@ The chartplotter view adds a second plugin, `signalk-navico-embedder`, which con
 - **Matt's beta.22 restructure is not merged.** A clean-up pass of the fork is planned with that merge: one source of state for the pane, one way of choosing a sender, and the monitor's main file split up.
 - **Our own copy of the circuit parser.** `lib/zcf-circuits.js` is Matt's structural parser plus the hidden-duplicate rule. Once his has the rule, ours can go.
 - **Switch inputs** are listed but their state is not decoded.
-- **Per-display permissions** are not respected: a circuit that only one display may switch off can be switched off from the webapp and the pane.
+- **Per-display permissions** are not respected: a circuit that only one display may switch off can be switched off from the webapp and the pane. Confirm before turning off (section 1.9) covers the common case by hand: the installer nominates the circuits.
 - **Pane order** is alphabetical; Victron has no setting for it.
 - **The GX unit setting** reads empty on Compass Rose and is treated as °C. What it reads when set to Fahrenheit has not been seen.
 - **Compass Rose:** the Victron DC instances were renumbered on 3 October (Start Battery 2, Alternator 4, Solar 7) and the Fridge temperature tag corrected, so each meter now has its own instance. House Battery (instance 0) is still sent by several devices; the plugin takes the BMS.
@@ -326,7 +348,8 @@ The chartplotter view adds a second plugin, `signalk-navico-embedder`, which con
 - **Which circuits to hide is not settled.** Today a circuit with no display among its controls is hidden. Matt wants his four solar-charger circuits shown; they have no controls at all. Two ways forward: he adds "All Display Interfaces" to them, or the rule becomes "hide when there are controls and none is a display; show when there are none". The second also brings back Meitaki's Audible Alarm, Cabin Fans and Cockpit USB and Sel Citron's Salon Air Conditioner. Waiting on Matt.
 - **State of a group circuit.** SugarShack's Timed Port and Timed Stbd Water Heater share a status bit with the plain water heaters, so each pair shows on and off together. "On only when every load it drives is on" would separate them; not built, and it needs SugarShack to test.
 - **Instruments on Compass Rose** now reads its own load. To be confirmed against what is physically on.
-- **Chartplotter layout** is to be installed and tried on the plotter. Day and night mode and the trend panel's symbols are still to do.
+- **Chartplotter layout:** day and night mode and the trend panel's symbols are still to do.
+- **Confirm before turning off** is to be installed and tried: the question on the plotter, the pane's switch returning to on, and a Mode on a boat that has Modes. On configurations where a Mode's actions cannot all be matched to circuits, a Mode can turn a nominated circuit off without asking.
 - **Compass Rose network.** The plotter sat behind the PredictWind DataHub Pro, on a different network from the Cerbo, so no tile could reach it. For the test the Cerbo's cable was moved to the DataHub, which left the Cerbo on two networks and made `venus.local` unreliable from the laptop. A Teltonika TSW010 switch is to go on the RUT200's LAN port with the Cerbo and the plotter on it; then the embedder's IP override changes to the Cerbo's wired address, the plotter's address goes on the embedder's client list, and the Cerbo's Wi-Fi goes off.
 - **Parked from the bench:** units from the ZCF, RGB circuits (an RGBW light is on order; it needs a Control X PLUS and a capture while the colour is changed), a Node-RED palette, the occasional current drop-out.
 

@@ -8,6 +8,7 @@ const nmea = require('./lib/nmea2000')
 const signalk = require('./lib/signalk')
 const { createMonitor } = require('./lib/monitor')
 const { prepareMapping } = require('./lib/fork-mapping')
+const confirmOffLib = require('./lib/confirm-off')
 
 const MAX_UPLOAD_BYTES = 1024 * 1024
 const CZONE_CONFIG_BLOCK_HEADER = 23
@@ -118,6 +119,8 @@ module.exports = function (app) {
   let configTransferTimer = null
   let configFastPacket = null
   let lastNetworkConfig = null
+  // [fork] circuits nominated to confirm before off, by circuit name
+  let confirmOff = new Set()
 
   const configDir = app.config && app.config.configPath
     ? path.join(app.config.configPath, 'plugin-config-data', PLUGIN_ID)
@@ -213,6 +216,45 @@ module.exports = function (app) {
       throw new Error(`Circuit "${circuit.name}" is not yet marked controllable`)
     }
     return circuit.protocolCircuitId
+  }
+
+  // [fork] Confirm before off (see lib/confirm-off.js).
+  function loadConfirmOff () {
+    const r = confirmOffLib.confirmOffFor(settings, mapping ? mapping.circuits : [])
+    confirmOff = r.marked
+    if (confirmOff.size) log(`Confirm before off: ${[...confirmOff].map(n => n.trim()).join(', ')}`)
+    if (r.unknown.length) log(`Confirm before off: no circuit named ${r.unknown.join(', ')} in this configuration`)
+  }
+
+  // The webapp has asked and the user said yes.
+  function confirmedBy (req) {
+    const q = req && req.query ? req.query.confirm : undefined
+    return q === '1' || q === 'true' || !!(req && req.body && req.body.confirm === true)
+  }
+
+  // An off from something that cannot ask (the Victron switch pane, a Signal K
+  // PUT from another app).
+  function refuseUnconfirmedOff (circuit) {
+    if (!confirmOff.has(circuit.name) || settings.confirmOffAllowElsewhere === true) return
+    throw new Error(`"${circuit.name.trim()}" is set to confirm before turning off. Turn it off from the CZone Circuits webapp, a chartplotter or a CZone keypad.`)
+  }
+
+  // The nominated circuits a mode would turn off: those that are on, or whose
+  // state is not known.
+  function modeTurnsOff (mode) {
+    if (!mapping || !confirmOff.size) return []
+    const out = []
+    for (const action of mode.actions || []) {
+      if (Number(action.valuePercent) > 0) continue
+      const target = modeTargetKey(action.target)
+      if (!target) continue
+      for (const c of mapping.circuits) {
+        if (!confirmOff.has(c.name) || circuitModeTargetKey(c) !== target || out.includes(c)) continue
+        const st = runtimeState.get(c.name)
+        if (!st || st.state !== 'OFF') out.push(c)
+      }
+    }
+    return out
   }
 
   const registeredPutPaths = new Set()
@@ -457,6 +499,7 @@ module.exports = function (app) {
             return { state: 'COMPLETED', statusCode: 400, message: 'switch.state requires a boolean' }
           }
           try {
+            if (!value) refuseUnconfirmedOff(circuitByName(circuit.slug))
             sendCircuitState(circuitByName(circuit.slug), value)
             const state = runtimeState.get(circuit.name)
             if (state) state.lastRequested = value ? 'ON' : 'OFF'
@@ -477,6 +520,7 @@ module.exports = function (app) {
               return { state: 'COMPLETED', statusCode: 400, message: 'switch.brightness requires a number between 0 and 1' }
             }
             try {
+              if (normalized <= 0) refuseUnconfirmedOff(circuitByName(circuit.slug))
               sendCircuitBrightness(circuitByName(circuit.slug), normalized)
               const state = runtimeState.get(circuit.name)
               if (state) state.lastRequestedPercent = Math.round(normalized * 100)
@@ -988,6 +1032,30 @@ module.exports = function (app) {
           default: false,
           description: 'Circuits that only drive CZone virtual switches (VS 01, VS 02, …) are hidden from the webapp and the Victron switch pane unless this is ticked.'
         },
+        confirmOff: {
+          type: 'array',
+          title: 'Confirm before turning off',
+          description: 'Circuits that must not go off by a slip of a finger: freezers and fridges, instruments, anything that powers the GX, the network or a display. The webapp and its chartplotter view ask "are you sure?" before turning one of these off. Turning on is never held up. CZone keypads and displays are not affected.',
+          default: [],
+          items: {
+            type: 'object',
+            required: ['circuit'],
+            properties: {
+              circuit: (() => {
+                const names = confirmOffLib.choices(settings, mapping ? mapping.circuits : [])
+                return names.length
+                  ? { type: 'string', title: 'Circuit', enum: names.map(n => n.value), enumNames: names.map(n => n.label) }
+                  : { type: 'string', title: 'Circuit (name as in the CZone configuration)' }
+              })()
+            }
+          }
+        },
+        confirmOffAllowElsewhere: {
+          type: 'boolean',
+          title: 'Let the Victron switch pane and other apps turn those circuits off',
+          default: false,
+          description: 'The Victron switch pane and other Signal K apps cannot ask "are you sure?". Unticked, an off from them is not acted on and the switch returns to on; the circuit can still be turned off from the webapp, a chartplotter or a CZone keypad.'
+        },
         victronSwitches: {
           type: 'boolean',
           title: 'Show CZone circuits in the Victron switch pane',
@@ -1014,9 +1082,11 @@ module.exports = function (app) {
       restartPlugin = restart
       fs.mkdirSync(configDir, { recursive: true })
       loadConfiguredZcf()
+      loadConfirmOff()
       monitor.setControls({
-        state: (slug, on) => sendCircuitState(circuitByName(slug), on),
-        brightness: (slug, level) => sendCircuitBrightness(circuitByName(slug), level),
+        // [fork] the Victron switch pane cannot ask "are you sure?"
+        state: (slug, on) => { if (!on) refuseUnconfirmedOff(circuitByName(slug)); return sendCircuitState(circuitByName(slug), on) },
+        brightness: (slug, level) => { if (level <= 0) refuseUnconfirmedOff(circuitByName(slug)); return sendCircuitBrightness(circuitByName(slug), level) },
         // [fork] The decoded state the webapp shows, for the Victron switch pane.
         getState: slug => {
           const c = mapping && mapping.circuits.find(x => x.slug === slug || x.name === slug)
@@ -1137,6 +1207,7 @@ module.exports = function (app) {
                 const t = monitor.temperatureFor(c.slug)
                 return {
                   ...c,
+                  confirmOff: confirmOff.has(c.name) ? true : undefined, // [fork]
                   state: runtimeState.get(c.name) || null,
                   current: monitor.valueAt(`electrical.czone.${c.slug}.current`),
                   temperature: t ? t.kelvin : undefined,
@@ -1172,7 +1243,9 @@ module.exports = function (app) {
           installedZcf: installedZcfInfo(),
           availableNetworkConfigs: listNetworkConfigs(),
           networkRead: lastNetworkConfig ? { ...lastNetworkConfig, blocks: undefined } : null,
-          nmeaReady
+          nmeaReady,
+          // [fork] the circuits offered under "Confirm before turning off"
+          circuitNames: confirmOffLib.choices({}, mapping ? mapping.circuits : []).map(n => n.value)
         })
       })
 
@@ -1261,6 +1334,12 @@ module.exports = function (app) {
       router.post('/modes/:name/activate', (req, res) => {
         try {
           const mode = modeByName(req.params.name)
+          // [fork] a mode that turns off a circuit nominated to confirm before off
+          const turnsOff = confirmedBy(req) ? [] : modeTurnsOff(mode)
+          if (turnsOff.length) {
+            res.status(409).json({ ok: false, needsConfirm: true, mode: mode.name, turnsOff: turnsOff.map(c => c.name.trim()), error: `Mode "${mode.name}" turns off ${turnsOff.map(c => c.name.trim()).join(', ')}, set to confirm before turning off. Reload this page to be asked.` })
+            return
+          }
           const line = sendMode(mode)
           res.json({
             ok: true,
@@ -1295,6 +1374,11 @@ module.exports = function (app) {
       router.post('/circuits/:name/off', (req, res) => {
         try {
           const circuit = circuitByName(req.params.name)
+          // [fork] confirm before off: the webapp asks first, then says so
+          if (confirmOff.has(circuit.name) && !confirmedBy(req)) {
+            res.status(409).json({ ok: false, needsConfirm: true, circuit: circuit.name, error: `"${circuit.name.trim()}" is set to confirm before turning off. Reload this page to be asked.` })
+            return
+          }
           const deviceId = commandDeviceId()
           const commands = circuit.capabilities.dimmer
             ? czone.dimmerOff(requireProtocolId(circuit), deviceId, 0x08)

@@ -105,6 +105,23 @@ var signalk_czone_circuits = (function () {
       persist({ showNonDisplayCircuits: value })
     }
 
+    // [fork] Confirm before turning off: a list of { circuit }.
+    function confirmOffList () {
+      return (Array.isArray(configuration.confirmOff) ? configuration.confirmOff : [])
+        .map(function (e) { return typeof e === 'string' ? { circuit: e } : e })
+        .filter(function (e) { return e && e.circuit })
+        .map(function (e) { return { circuit: e.circuit } })
+    }
+
+    function addConfirmOff (name) {
+      if (!name) return
+      persist({ confirmOff: confirmOffList().concat([{ circuit: name }]) })
+    }
+
+    function removeConfirmOff (index) {
+      persist({ confirmOff: confirmOffList().filter(function (_e, i) { return i !== index }) })
+    }
+
     function setTrendDirectory (value) {
       persist({ trendDirectory: String(value || '').trim() })
     }
@@ -279,6 +296,32 @@ var signalk_czone_circuits = (function () {
           ' Show circuits that are not on any CZone display'
         ),
         React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'A circuit with no display among its Circuit Controls (thermostat feeds, "pump running" indicators, alarm relays) is left out of the webapp and the Victron switch pane, as on a CZone display. Its state is still published to Signal K.')
+      ),
+
+      React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
+        React.createElement('strong', null, 'Confirm before turning off'),
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'For circuits that must not go off by a slip of a finger: freezers and fridges, instruments, anything that powers the GX, the network or a display. The webapp and its chartplotter view ask "are you sure?" before turning one of these off. Turning on is never held up. CZone keypads and displays are not affected.'),
+        confirmOffList().map(function (e, i) {
+          var known = !data || !Array.isArray(data.circuitNames) || data.circuitNames.some(function (n) { return n.trim().toLowerCase() === String(e.circuit).trim().toLowerCase() })
+          return React.createElement('div', { key: e.circuit + ':' + i, style: { marginTop: 8 } },
+            React.createElement('span', { style: { display: 'inline-block', minWidth: 170, fontWeight: 600 } }, e.circuit + (known ? '' : ' (not in this configuration)')),
+            React.createElement('button', { type: 'button', disabled: busy, onClick: function () { removeConfirmOff(i) } }, 'Remove')
+          )
+        }),
+        React.createElement('label', { style: { display: 'block', marginTop: 10 } }, 'Add a circuit ',
+          React.createElement('select', { value: '', disabled: busy || !data || !Array.isArray(data.circuitNames) || !data.circuitNames.length, onChange: function (e) { addConfirmOff(e.target.value) } },
+            [React.createElement('option', { key: '', value: '' }, data && Array.isArray(data.circuitNames) && data.circuitNames.length ? 'Choose a circuit' : 'Load a CZone configuration first')].concat(
+              (data && Array.isArray(data.circuitNames) ? data.circuitNames : [])
+                .filter(function (n) { return !confirmOffList().some(function (e) { return String(e.circuit).trim().toLowerCase() === n.trim().toLowerCase() }) })
+                .map(function (n) { return React.createElement('option', { key: n, value: n }, n) })
+            )
+          )
+        ),
+        React.createElement('label', { style: { display: 'block', marginTop: 12 } },
+          React.createElement('input', { type: 'checkbox', checked: configuration.confirmOffAllowElsewhere === true, disabled: busy || !confirmOffList().length, onChange: function (e) { persist({ confirmOffAllowElsewhere: e.target.checked }) } }),
+          ' Let the Victron switch pane and other apps turn these circuits off'
+        ),
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'The Victron switch pane and other Signal K apps cannot ask "are you sure?". Unticked, an off from them is not acted on and the switch returns to on. The circuit can still be turned off from the webapp, a chartplotter or a CZone keypad.')
       ),
 
       React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },

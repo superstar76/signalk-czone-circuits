@@ -91,6 +91,7 @@ If the list is empty, see section 10.
 - **ON / OFF button:** press to switch. It shows "Sending…" until the CZone system confirms.
 - **Dimmable circuits** have a slider.
 - **Modes** are in their own panel. Press a Mode to activate it.
+- **A padlock after the name** means the circuit asks before it is turned off (section 3.5).
 
 ### 3.3 What each row tells you
 
@@ -107,6 +108,17 @@ Two kinds of circuit are left out, because nobody switches them by hand:
 - **Circuits that are not on any CZone display**, such as thermostat feeds, "pump running" indicators and alarm relays.
 
 Both can be shown with a setting (section 8). Their state is still published to Signal K either way.
+
+### 3.5 Circuits that ask before turning off
+
+Some circuits should not go off by a slip of a finger: a freezer of long-term stores, or the circuit that powers the display you are using. You choose which, in the settings (section 8, **Confirm before turning off**): pick the circuit from the list.
+
+- **In the webapp and on a chartplotter**, the circuit shows a padlock after its name. Turning it off asks "Turn off Freezer?". Press **Keep on** or **Turn off**. Turning it on never asks.
+- **A Mode** that would turn one of these circuits off asks in the same way, where the plugin can tell which circuits the Mode switches.
+- **The Victron switch pane and other apps** cannot ask a question, so they cannot turn these circuits off: the switch goes back to on. They can still turn them on. If you would rather they could turn them off, tick **Let the Victron switch pane and other apps turn these circuits off**.
+- **CZone keypads and displays** work as they always have.
+
+Typical choices: freezers and fridges, instruments, and any circuit that powers the GX, the router or a display. If you turn off the circuit that powers the screen you are looking at, you will need a keypad or another screen to turn it back on.
 
 ## 4. Monitoring
 
@@ -175,6 +187,7 @@ What you get:
 - **One switch per circuit**, a slider for a dimmable circuit, grouped by CZone category.
 - **The label** shows the name, then the temperature and the current: "Freezer (-8.2 °C, 2.9 A)". Temperature follows the unit set on the GX. Both can be turned off in the settings. The label is deliberately steady: it ignores wobbles of 0.1, so it can differ slightly from the exact current the GX shows beside it.
 - **Both directions:** a change made anywhere shows in the pane, and a tap in the pane switches the circuit.
+- **Circuits that ask before turning off** (section 3.5) can be turned on from the pane but not off, unless you allow it in the settings.
 - **Renaming:** names, groups and the device name can be edited on the GX and are kept.
 - **Order:** the GX lists switches alphabetically within a group. That cannot be changed.
 
@@ -210,6 +223,8 @@ All in **Server → Plugin Config → CZone Circuits**.
 | Allow this plugin to send NMEA 2000 messages | off | lets the webapp and the switch pane switch circuits |
 | Show virtual switch circuits | off | lists circuits that only drive virtual switches |
 | Show circuits that are not on any CZone display | off | lists circuits no CZone display shows |
+| Confirm before turning off | none | the circuits that ask before they are turned off (section 3.5) |
+| Let the Victron switch pane and other apps turn these circuits off | off | they cannot ask, so by default they cannot turn those circuits off |
 | Show CZone circuits in the Victron switch pane | off | adds the circuits to the GX switch pane and VRM |
 | Show circuit current in the switch label | on | "Light 1 (1.5 A)" |
 | Show temperature in the switch label | on | "Freezer (-8.2 °C, 2.9 A)" |

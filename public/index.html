@@ -106,6 +106,18 @@
     .temp-chip { flex:none; margin-left:8px; padding:2px 8px; border:1px solid rgba(255,159,88,.35); border-radius:999px; background:rgba(255,159,88,.10); color:#ffb884; font:inherit; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; cursor:pointer; vertical-align:1px; }
     .temp-chip small { display:inline; margin:0 0 0 2px; font-size:10px; font-weight:500; color:inherit; opacity:.8; }
     .temp-chip:hover { border-color:#ff9f58; }
+    /* [fork] Confirm before off: the mark on a nominated circuit, and the question. */
+    .ask-mark { color:#e6b450; margin-left:7px; }
+    .ask-mark svg { width:13px; height:13px; vertical-align:-1px; fill:none; stroke:currentColor; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+    .ask { position:fixed; top:0; right:0; bottom:0; left:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(2,8,16,.72); }
+    .ask-box { width:100%; max-width:420px; padding:22px 22px 18px; border:1px solid rgba(148,193,235,.28); border-radius:16px; background:#0f2237; box-shadow:0 18px 60px rgba(0,0,0,.55); }
+    .ask-box h3 { margin:0 0 8px; font-size:19px; color:#fff; }
+    .ask-box p { margin:0 0 6px; color:#a9bfd2; font-size:14px; line-height:1.45; }
+    .ask-buttons { display:flex; margin-top:18px; }
+    .ask-buttons button { flex:1 1 0; min-height:46px; border-radius:12px; border:1px solid rgba(148,193,235,.25); font-size:15px; font-weight:700; cursor:pointer; }
+    .ask-buttons .ask-no { margin-right:12px; background:#1b4a73; color:#fff; }
+    .ask-buttons .ask-yes { background:#3a1620; border-color:rgba(255,120,120,.45); color:#ffb4b4; }
+    .ask-buttons .ask-yes:disabled { opacity:.45; cursor:default; }
     .toggle-amps { display:block; font-size:10px; font-weight:600; opacity:.85; letter-spacing:0; margin-top:1px; }
     .toggle.on { background:linear-gradient(135deg,#1cbd78,#168d5b); border-color:rgba(100,228,170,.55); color:#fff; }
     .toggle.off { background:#172b40; color:#c4d4e3; }
@@ -232,6 +244,11 @@
     .mfd .temp-chip { font-size:14px; padding:3px 9px; }
     .mfd .toggle { min-width:104px; min-height:54px; font-size:17px; }
     .mfd .toggle-amps { font-size:12px; }
+    .mfd .ask-box { max-width:520px; padding:26px; box-shadow:none; }
+    .mfd .ask-box h3 { font-size:24px; }
+    .mfd .ask-box p { font-size:17px; }
+    .mfd .ask-buttons button { min-height:64px; font-size:19px; }
+    .mfd .ask-mark svg { width:16px; height:16px; }
     .mfd .control > * + *, .mfd .range-wrap > * + * { margin-left:9px; }
     .mfd .connection > * + * { margin-left:7px; }
     .mfd .arrow { font-size:26px; padding:8px 4px; }
@@ -335,6 +352,8 @@
   const COMMAND_RECONCILE_ATTEMPTS = 12;
   const pending = new Map();
   let modePending = null;
+  // [fork] the mark on a circuit set to confirm before off
+  const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
   const favoritesKey = 'signalk-czone-circuits:favorites';
   let favorites = new Set(JSON.parse(localStorage.getItem(favoritesKey) || '[]'));
 
@@ -467,6 +486,10 @@
     patch(document.querySelector('#circuits'), list.length ? list.map(circuitRow).join('') : `<div class="empty">No circuits match this view.</div>`);
   }
 
+  // [fork] a padlock after the name of a circuit set to confirm before off
+  function askMark(c) {
+    return c.confirmOff ? `<span class="ask-mark" title="Asks before turning off">${LOCK_SVG}</span>` : '';
+  }
   function circuitRow(c) {
     const on = stateOf(c), pct = percentOf(c), dim = !!(c.capabilities && c.capabilities.dimmer), fav = favorites.has(nameKey(c));
     const p = pending.get(nameKey(c));
@@ -475,7 +498,7 @@
     const toggle = `<button type="button" class="toggle ${on?'on':'off'} ${disabled?'pending':''}" ${disabled?'disabled':''} aria-busy="${disabled?'true':'false'}" aria-label="Turn ${on?'off':'on'} ${esc(c.name)}" onclick="toggleCircuit('${encodeURIComponent(c.name)}',${!on})">${disabled?'Sending…':(on?`ON${typeof c.current === 'number' ? `<small class="toggle-amps">${c.current.toFixed(1)} A</small>` : ''}`:'OFF')}</button>`;
     const control = dim ? `<div class="control"><div class="range-wrap"><input aria-label="${esc(c.name)} brightness" type="range" min="1" max="100" value="${Math.max(1,Math.round(pct == null ? 100 : pct))}" oninput="previewPercent(this)" onchange="setLevel('${encodeURIComponent(c.name)}',this.value)"><span class="percent">${pct == null ? '—' : Math.round(pct)+'%'}</span></div>${toggle}</div>` : `<div class="control">${toggle}</div>`;
     const sending = p ? `<span class="sending">Sending…</span>` : '';
-    return `<div class="circuit"><button class="fav ${fav?'on':''}" title="${fav?'Remove from':'Add to'} favorites" onclick="toggleFavorite('${esc(nameKey(c)).replace(/'/g,"\\'")}')">${fav?'★':'☆'}</button><div class="circuit-name">${typeof c.temperature === 'number' ? `<strong class="with-chip"><span>${esc(c.name)}</span>${tempChip(c)}</strong>` : `<strong>${esc(c.name)}</strong>`}<small title="${esc(alsoDrives(c))}">${esc(c.masterCategory || 'CZone')}${outputLabel(c) ? ' · ' + esc(outputLabel(c)) : ''}</small></div><div class="tags"><span class="tag">${esc(c.masterCategory || 'CZone')}</span>${cats}</div><div><div class="status ${on?'on':''}"><span class="status-dot"></span>${on?'ON':'OFF'} ${sending}</div>${control}</div><button type="button" class="arrow trend-arrow" title="Current trend" aria-label="${esc(c.name)} current trend" onclick="window.czoneMonitor && window.czoneMonitor.trendPath('electrical.czone.${esc(c.slug)}.current')">›</button></div>`;
+    return `<div class="circuit"><button class="fav ${fav?'on':''}" title="${fav?'Remove from':'Add to'} favorites" onclick="toggleFavorite('${esc(nameKey(c)).replace(/'/g,"\\'")}')">${fav?'★':'☆'}</button><div class="circuit-name">${typeof c.temperature === 'number' ? `<strong class="with-chip"><span>${esc(c.name)}${askMark(c)}</span>${tempChip(c)}</strong>` : `<strong>${esc(c.name)}${askMark(c)}</strong>`}<small title="${esc(alsoDrives(c))}">${esc(c.masterCategory || 'CZone')}${outputLabel(c) ? ' · ' + esc(outputLabel(c)) : ''}</small></div><div class="tags"><span class="tag">${esc(c.masterCategory || 'CZone')}</span>${cats}</div><div><div class="status ${on?'on':''}"><span class="status-dot"></span>${on?'ON':'OFF'} ${sending}</div>${control}</div><button type="button" class="arrow trend-arrow" title="Current trend" aria-label="${esc(c.name)} current trend" onclick="window.czoneMonitor && window.czoneMonitor.trendPath('electrical.czone.${esc(c.slug)}.current')">›</button></div>`;
   }
 
   // [fork] The temperature that belongs to a circuit (an input named
@@ -688,12 +711,47 @@
     } catch (_) {}
   }
 
+  // [fork] Confirm before off. Circuits the installer has nominated (plugin
+  // configuration) are turned off only after a question: the question and two
+  // buttons, nothing else. Our own dialog, not
+  // window.confirm: a chartplotter's browser may not show one. "Turn off" is
+  // dead for the first half second, so a double tap cannot answer it.
+  let closeAsk = null;
+  function ask(title, lines, yes, no) {
+    return new Promise(resolve => {
+      if (closeAsk) closeAsk(false);
+      const el = document.createElement('div');
+      el.className = 'ask';
+      el.innerHTML = `<div class="ask-box" role="alertdialog" aria-modal="true" aria-labelledby="askTitle"><h3 id="askTitle">${esc(title)}</h3>${lines.filter(Boolean).map(l => `<p>${esc(l)}</p>`).join('')}<div class="ask-buttons"><button type="button" class="ask-no">${esc(no)}</button><button type="button" class="ask-yes" disabled>${esc(yes)}</button></div></div>`;
+      const onKey = e => { if (e.key === 'Escape') done(false); };
+      const done = v => { document.removeEventListener('keydown', onKey, true); el.remove(); closeAsk = null; resolve(v); };
+      el.addEventListener('click', e => {
+        if (e.target === el || e.target.closest('.ask-no')) done(false);
+        else if (e.target.closest('.ask-yes') && !el.querySelector('.ask-yes').disabled) done(true);
+      });
+      document.addEventListener('keydown', onKey, true);
+      closeAsk = done;
+      document.body.appendChild(el);
+      el.querySelector('.ask-no').focus();
+      setTimeout(() => { const b = el.querySelector('.ask-yes'); if (b) b.disabled = false; }, 500);
+    });
+  }
+  const askOff = c => ask(`Turn off ${c.name.trim()}?`, [], 'Turn off', 'Keep on');
+
   async function post(path, body, circuit, kind, requested, previous) {
     setPending(circuit, kind, requested, previous);
     render();
     try {
       const r = await fetch(`${API}${path}`, { method:'POST', credentials:'include', headers: body ? {'Content-Type':'application/json'} : undefined, body: body ? JSON.stringify(body) : undefined });
       const data = await r.json();
+      if (r.status === 409 && data.needsConfirm) {
+        // [fork] nominated since this page loaded: ask now, then send again
+        rollbackPending(circuit, kind);
+        circuit.confirmOff = true;
+        render();
+        askOff(circuit).then(ok => { if (ok) window.toggleCircuit(encodeURIComponent(circuit.name), false, true); });
+        return;
+      }
       if (!r.ok) throw new Error(data.error || 'Command failed');
       // HTTP 200 means the command was accepted by Signal K. CZone confirmation
       // normally comes from the WebSocket delta. A short, command-only REST
@@ -708,14 +766,15 @@
       alert(e.message);
     }
   }
-  window.toggleCircuit = (name, on) => {
+  window.toggleCircuit = (name, on, confirmed) => {
     const c = circuits.find(x => x.name === decodeURIComponent(name)); if (!c) return;
     const existing = pending.get(nameKey(c));
     if (existing && existing.kind === 'state') { console.debug('[CZone UI] duplicate state click ignored', c.name); return; }
+    if (!on && c.confirmOff && !confirmed) { askOff(c).then(ok => { if (ok) window.toggleCircuit(name, false, true); }); return; }
     c.state = c.state || {};
     const previous = c.state.state || 'OFF';
     c.state.state = on ? 'ON' : 'OFF';
-    post(`/circuits/${name}/${on?'on':'off'}`, null, c, 'state', on ? 'ON' : 'OFF', previous);
+    post(`/circuits/${name}/${on?'on':'off'}${!on && confirmed ? '?confirm=1' : ''}`, null, c, 'state', on ? 'ON' : 'OFF', previous);
   };
   window.setLevel = (name, value) => {
     const c = circuits.find(x => x.name === decodeURIComponent(name)); if (!c) return;
@@ -739,7 +798,7 @@
     }).join(''));
   }
 
-  window.activateMode = function (slug) {
+  window.activateMode = function (slug, confirmed) {
     const decoded = decodeURIComponent(slug);
     const mode = modes.find(m => m.slug === decoded);
     if (!mode || modePending) return;
@@ -747,8 +806,18 @@
     activeMode = mode;
     modePending = { slug: mode.slug, previous: previous };
     renderModes();
-    fetch(`${API}/modes/${encodeURIComponent(mode.slug)}/activate`, { method:'POST', credentials:'include' })
-      .then(async r => { const data = await r.json(); if (!r.ok) throw new Error(data.error || 'Mode command failed'); })
+    fetch(`${API}/modes/${encodeURIComponent(mode.slug)}/activate${confirmed ? '?confirm=1' : ''}`, { method:'POST', credentials:'include' })
+      .then(async r => {
+        const data = await r.json();
+        if (r.status === 409 && data.needsConfirm) {
+          // [fork] this mode turns off a circuit set to confirm before off
+          activeMode = previous; modePending = null; renderModes();
+          const ok = await ask(`Switch to ${mode.name}?`, ['This mode turns off ' + (data.turnsOff || []).join(', ') + '.'], 'Switch mode', 'Cancel');
+          if (ok) window.activateMode(slug, true);
+          return;
+        }
+        if (!r.ok) throw new Error(data.error || 'Mode command failed');
+      })
       .catch(err => { activeMode = previous; modePending = null; renderModes(); alert(err.message); });
   };
 
@@ -788,7 +857,7 @@
     };
     const applyDrag = () => { frame = 0; if (drag && drag.moved) drag.box.scrollTop = drag.want; };
     document.addEventListener('mousedown', e => {
-      if (e.button !== 0 || (e.target.closest && e.target.closest('input, select, canvas'))) return;
+      if (e.button !== 0 || (e.target.closest && e.target.closest('input, select, canvas, .ask'))) return;
       const box = scrollerOf(e.target);
       drag = { box, y: e.clientY, top: box.scrollTop, want: box.scrollTop, moved: false, held: false };
       mfdBusyUntil = Date.now() + 1500;
