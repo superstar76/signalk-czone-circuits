@@ -1,0 +1,2799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CZone Control</title>
+<script src="icons.js"></script>
+<style>
+  :root {
+    --bg:         #0a0e14;
+    --bg2:        #111720;
+    --bg3:        #1a2233;
+    --border:     #243048;
+    --accent:     #00c8ff;
+    --accent2:    #0088bb;
+    --on:         #00e87a;
+    --on-dim:     #00703b;
+    --off:        #334466;
+    --danger:     #ff4455;
+    --text:       #e8f0ff;
+    --text-dim:   #7a90b8;
+    --text-muted: #3a4d6a;
+    --radius:     6px;
+    --font:       system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  .hidden { display: none !important; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    min-height: 100vh;
+    overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Header ──────────────────────────────────────────────── */
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 54px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 34px; height: 34px; border-radius: 6px; overflow: hidden; flex-shrink: 0; }
+  .logo-text { font-size: 20px; font-weight: 700; letter-spacing: 0.3px; color: var(--text); }
+  .logo-text span { color: var(--accent); }
+
+  .status-pill {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
+    padding: 4px 12px; border-radius: 20px; background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text-dim); display: flex; align-items: center; gap: 6px;
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); transition: background 0.3s; }
+  .status-dot.online { background: var(--on); box-shadow: 0 0 6px var(--on); }
+
+  /* ── Tabs ────────────────────────────────────────────────── */
+  .tabs { background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; align-items: stretch; padding: 0 20px; overflow-x: auto; position: sticky; top: 0; z-index: 100; }
+  .tabs-left { display: flex; align-items: stretch; flex: 1; gap: 0; }
+  .tabs-right { display: flex; align-items: center; }
+  .tab-sep { width: 1px; background: rgba(255,255,255,0.08); margin: 10px 0; flex-shrink: 0; }
+  .tab {
+    font-size: 13px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
+    padding: 14px 18px 12px; cursor: pointer; color: var(--text-dim);
+    border-bottom: 2px solid transparent; transition: all 0.2s; user-select: none; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab.hidden-tab { display: none; }
+  .settings-cog {
+    width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--text-dim); border-radius: 50%; transition: all 0.2s;
+    margin-left: 8px;
+  }
+  .settings-cog:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+  .settings-cog.active { color: var(--accent); }
+  /* Settings drawer */
+  .settings-drawer {
+    position: fixed; top: 0; right: -380px; width: 360px; height: 100vh;
+    background: var(--bg2); border-left: 1px solid var(--border);
+    z-index: 200; transition: right 0.25s ease; overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .settings-drawer.open { right: 0; }
+  .settings-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 199;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  }
+  .settings-overlay.open { opacity: 1; pointer-events: all; }
+  .settings-drawer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .settings-drawer-title { font-size: 14px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text); }
+  .settings-drawer-close { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 20px; padding: 4px 8px; }
+  .settings-drawer-close:hover { color: var(--text); }
+  .settings-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .settings-section-title { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px; }
+  .settings-nav-item {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    cursor: pointer; border-radius: var(--radius); color: var(--text-dim);
+    font-size: 13px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+    transition: all 0.15s; margin-bottom: 4px;
+  }
+  .settings-nav-item:hover { background: var(--bg3); color: var(--text); }
+  .settings-nav-item.active { background: var(--bg3); color: var(--accent); }
+  .settings-toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .settings-toggle-row:last-child { border-bottom: none; }
+  .settings-toggle-label { font-size: 13px; color: var(--text); }
+  .settings-toggle-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── Control — List view ─────────────────────────────────── */
+  .circuit-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .circuit-row {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 16px; display: flex; align-items: center; gap: 14px;
+    cursor: pointer; transition: all 0.15s; user-select: none; position: relative; overflow: hidden;
+  }
+  .circuit-row::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--off); transition: background 0.2s; }
+  .circuit-row.on::before { background: var(--on); }
+  .circuit-row.on { border-color: var(--on-dim); background: #0d1f16; }
+  .circuit-row:active { transform: scale(0.995); }
+
+  .row-icon { width: 32px; height: 32px; flex-shrink: 0; color: var(--text-dim); opacity: 0.7; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+  .circuit-row.on .row-icon { color: var(--on); opacity: 1; }
+
+  .row-info { flex: 1; min-width: 0; }
+  .row-name { font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-readings { font-size: 12px; color: var(--text-muted); margin-top: 2px; display: flex; gap: 12px; }
+  .row-reading { display: flex; align-items: center; gap: 4px; }
+  .row-reading-val { color: var(--text-dim); font-weight: 500; }
+
+  .row-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+  .row-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .row-state-label { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); min-width: 28px; text-align: right; }
+  .circuit-row.on .row-state-label { color: var(--on); }
+
+  /* ── Control — Grid view ─────────────────────────────────── */
+  .circuit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 12px; }
+
+  .circuit-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; cursor: pointer; transition: all 0.15s; user-select: none;
+    position: relative; overflow: hidden; display: flex; flex-direction: column;
+  }
+  .circuit-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--off); transition: background 0.2s; }
+  .circuit-card.on::before { background: var(--on); }
+  .circuit-card.on { border-color: var(--on-dim); background: #0d1f16; }
+  .circuit-card:active { transform: scale(0.97); }
+
+  /* ── Circuit group headers ───────────────────────────────── */
+  .circuit-group-header {
+    display: flex; align-items: center; gap: 10px; padding: 10px 4px 8px;
+    cursor: pointer; user-select: none; margin-top: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .circuit-group-header:first-child { margin-top: 0; }
+  .circuit-group-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text-muted); flex: 1;
+  }
+  .circuit-group-count {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    background: var(--bg3); border-radius: 10px; padding: 2px 8px; min-width: 22px; text-align: center;
+  }
+  .circuit-group-chevron {
+    color: var(--text-muted); transition: transform 0.2s; flex-shrink: 0;
+  }
+  .circuit-group-header.collapsed .circuit-group-chevron { transform: rotate(-90deg); }
+  .circuit-group-header:hover .circuit-group-label { color: var(--text-dim); }
+  .circuit-group-header + .circuit-list,
+  .circuit-group-header + .circuit-grid { margin-top: 8px; }
+
+  /* ── Trend button & modal ──────────────────────────────── */
+  .trend-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: none; border: 1px solid var(--border); border-radius: 4px;
+    color: var(--accent); cursor: pointer; padding: 2px 4px; margin-left: 6px;
+    vertical-align: middle; opacity: 0.6; transition: opacity 0.15s;
+  }
+  .trend-btn:hover { opacity: 1; background: var(--bg3); }
+
+  .trend-modal-inner {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+    width: min(95vw, 700px); max-height: 90vh; overflow-y: auto;
+    padding: 20px; position: relative;
+  }
+  .trend-modal-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+  }
+  .trend-modal-title { font-size: 16px; font-weight: 700; color: var(--text); }
+  .trend-range-bar {
+    display: flex; gap: 6px; margin-bottom: 16px;
+  }
+  .trend-range-btn {
+    flex: 1; padding: 8px 4px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text-dim); font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s; text-align: center;
+  }
+  .trend-range-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .trend-range-btn:hover:not(.active) { background: var(--bg3); color: var(--text); }
+  .trend-chart-wrap {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; margin-bottom: 12px; position: relative;
+  }
+  #trendCanvas { width: 100%; height: 250px; display: block; }
+  .trend-stats {
+    display: flex; gap: 16px; justify-content: center; font-size: 12px; color: var(--text-dim);
+  }
+  .trend-stats span { display: flex; align-items: center; gap: 4px; }
+  .trend-stat-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .trend-loading, .trend-empty {
+    text-align: center; padding: 40px 20px; color: var(--text-dim); font-size: 13px;
+  }
+
+  .card-icon { width: 28px; height: 28px; color: var(--text-dim); opacity: 0.6; margin-bottom: 10px; transition: all 0.2s; }
+  .circuit-card.on .card-icon { color: var(--on); opacity: 1; }
+
+  .card-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 8px; line-height: 1.2; flex: 1; }
+
+  .card-readings { font-size: 11px; color: var(--text-muted); margin-bottom: 10px; display: flex; gap: 8px; }
+  .card-reading-val { color: var(--text-dim); }
+
+  .card-footer { display: flex; align-items: center; justify-content: space-between; }
+  .card-state-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); }
+  .circuit-card.on .card-state-label { color: var(--on); }
+
+  .card-meta { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+
+  /* ── Toggle switch (shared) ──────────────────────────────── */
+  .toggle-switch {
+    width: 40px; height: 22px; background: var(--off); border-radius: 11px;
+    position: relative; transition: background 0.2s; flex-shrink: 0;
+  }
+  .on .toggle-switch { background: var(--on); }
+  .toggle-switch::after {
+    content: ''; position: absolute; width: 16px; height: 16px; background: white;
+    border-radius: 50%; top: 3px; left: 3px; transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+  .on .toggle-switch::after { transform: translateX(18px); }
+
+  /* ── Monitoring tab ──────────────────────────────────────── */
+  .monitor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .monitor-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+  .monitor-list .monitor-card { border-radius: var(--radius); }
+  .monitor-list .mon-readings-row { display: flex; align-items: stretch; }
+  .monitor-list .mon-reading-col { flex: 1; display: flex; flex-direction: column; padding: 8px 16px; }
+  .monitor-list .mon-reading-col + .mon-reading-col { border-left: 1px solid rgba(255,255,255,0.08); }
+  .monitor-list .mon-col-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 4px; }
+  .monitor-list .mon-col-val { font-size: 18px; font-weight: 700; color: var(--text); }
+  .monitor-list .mon-col-unit { font-size: 11px; color: var(--text-muted); margin-left: 3px; }
+
+  .monitor-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; position: relative; overflow: hidden;
+  }
+  .monitor-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--accent); }
+  .monitor-card.warn::before { background: #ffaa00; }
+  .monitor-card.danger::before { background: var(--danger); }
+
+  .monitor-label { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+  .monitor-value { font-size: 28px; font-weight: 700; color: var(--text); line-height: 1; }
+  .mon-reading-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .mon-reading-row:last-of-type { border-bottom: none; }
+  .mon-reading-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
+  .mon-reading-val { font-size: 18px; font-weight: 700; color: var(--text); }
+  .monitor-unit { font-size: 14px; font-weight: 400; color: var(--text-dim); margin-left: 3px; }
+  .monitor-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  .monitor-section-header {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text-dim); margin: 20px 0 10px; padding: 8px 12px;
+    background: rgba(0,200,255,0.04); border-bottom: 1px solid rgba(0,200,255,0.12); border-radius: var(--radius);
+  }
+  .monitor-section-header:first-child { margin-top: 0; }
+  .monitor-list, .monitor-grid { padding-left: 20px; }
+
+  /* ── Tank bar ────────────────────────────────────────────── */
+  .tank-bar-wrap { margin-top: 8px; background: var(--bg3); border-radius: 3px; height: 6px; overflow: hidden; }
+  .tank-bar { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s; }
+  .tank-bar.warn { background: #ffaa00; }
+  .tank-bar.danger { background: var(--danger); }
+
+  /* ── Config panel ────────────────────────────────────────── */
+  .config-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
+  .config-card-header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; background: var(--bg3); border-bottom: 1px solid var(--border); }
+  .config-card-num { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+  .config-card-body { padding: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 500px) { .config-card-body { grid-template-columns: 1fr; } }
+  .config-card-body .full-width { grid-column: 1 / -1; }
+
+  .field-group { display: flex; flex-direction: column; gap: 6px; }
+  .field-label { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-muted); }
+
+  .field-input, .field-select {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-family: var(--font); font-size: 14px; padding: 10px 12px;
+    width: 100%; outline: none; transition: border-color 0.2s; appearance: none; -webkit-appearance: none;
+  }
+  .field-input:focus, .field-select:focus { border-color: var(--accent); }
+  .field-select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a90b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; cursor: pointer;
+  }
+  .field-select option { background: var(--bg2); color: var(--text); }
+
+  /* ── Icon picker ─────────────────────────────────────────── */
+  .icon-picker-btn {
+    display: flex; align-items: center; gap: 10px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px; cursor: pointer; transition: border-color 0.2s; width: 100%;
+    color: var(--text); font-family: var(--font); font-size: 14px;
+  }
+  .icon-picker-btn:hover { border-color: var(--accent); }
+  .icon-picker-btn svg { color: var(--accent); flex-shrink: 0; }
+
+  .icon-picker-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 500;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .icon-picker-modal.hidden { display: none; }
+
+  .icon-picker-inner {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+    width: 100%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  .icon-picker-header {
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .icon-picker-title { font-size: 15px; font-weight: 700; color: var(--text); }
+
+  .icon-picker-body { overflow-y: auto; padding: 16px; }
+
+  .icon-category-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text-muted); margin: 16px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .icon-category-label:first-child { margin-top: 0; }
+
+  .icon-grid-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; margin-bottom: 8px; }
+
+  .icon-opt {
+    aspect-ratio: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.15s; padding: 4px; gap: 3px; color: var(--text-dim);
+  }
+  .icon-opt:hover { border-color: var(--accent); color: var(--accent); }
+  .icon-opt.selected { border-color: var(--accent); background: rgba(0,200,255,0.1); color: var(--accent); }
+  .icon-opt-label { font-size: 8px; text-align: center; color: var(--text-muted); line-height: 1.2; overflow: hidden; max-width: 100%; }
+
+  /* ── Channel grid ────────────────────────────────────────── */
+  .channel-grid { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; }
+  @media (max-width: 600px) { .channel-grid { grid-template-columns: repeat(7, 1fr); } }
+
+  .channel-btn {
+    aspect-ratio: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 3px;
+    color: var(--text-dim); font-family: var(--font); font-size: 11px; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; user-select: none; padding: 4px;
+  }
+  .channel-btn:hover:not(.used):not(.selected) { border-color: var(--accent); color: var(--accent); }
+  .channel-btn.selected { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 700; }
+  .channel-btn.used { background: var(--bg3); border-color: var(--border); color: var(--text-muted); cursor: not-allowed; opacity: 0.35; }
+
+  /* ── Theme panel ─────────────────────────────────────────── */
+  .theme-section { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin: 24px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .theme-section:first-child { margin-top: 0; }
+
+  .preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 8px; }
+  .preset-btn { border-radius: var(--radius); padding: 10px 12px; cursor: pointer; font-size: 12px; font-weight: 600; border: 1px solid; transition: all 0.15s; text-align: center; }
+  .preset-btn:hover { transform: scale(1.02); }
+
+  .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-bottom: 8px; }
+  .theme-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; gap: 12px; }
+  .theme-row-label { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+  .theme-row-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .color-swatch { width: 36px; height: 36px; border-radius: 6px; border: 2px solid var(--border); cursor: pointer; flex-shrink: 0; position: relative; overflow: hidden; }
+  .color-swatch input[type="color"] { position: absolute; top: -4px; left: -4px; width: 48px; height: 48px; border: none; cursor: pointer; opacity: 0; }
+
+  .font-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+  .font-btn { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; cursor: pointer; transition: all 0.15s; color: var(--text); }
+  .font-btn:hover, .font-btn.active { border-color: var(--accent); background: var(--bg3); }
+  .font-btn-name { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 4px; }
+  .font-btn-preview { font-size: 16px; color: var(--text); }
+
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; cursor: pointer; }
+  .toggle-row-label { font-size: 14px; font-weight: 500; color: var(--text); }
+  .toggle-row-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .pill-toggle { width: 44px; height: 24px; background: var(--off); border-radius: 12px; position: relative; transition: background 0.2s; flex-shrink: 0; }
+  .pill-toggle.on { background: var(--accent); }
+  .pill-toggle::after { content: ''; position: absolute; width: 18px; height: 18px; background: white; border-radius: 50%; top: 3px; left: 3px; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  .pill-toggle.on::after { transform: translateX(20px); }
+
+  /* ── Buttons ─────────────────────────────────────────────── */
+  .btn { font-family: var(--font); font-size: 13px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; padding: 10px 20px; border-radius: var(--radius); border: none; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 8px; user-select: none; }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid transparent; }
+  .btn-danger:hover { border-color: var(--danger); }
+  .btn-add { background: var(--bg2); color: var(--accent); border: 1px dashed var(--accent2); width: 100%; justify-content: center; padding: 14px; margin-bottom: 16px; font-family: var(--font); font-size: 13px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; border-radius: var(--radius); cursor: pointer; transition: all 0.15s; display: flex; align-items: center; }
+  .btn-add:hover { background: var(--bg3); border-style: solid; }
+  .config-actions { display: flex; gap: 12px; justify-content: flex-end; padding-top: 8px; }
+
+  /* ── Toast ───────────────────────────────────────────────── */
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 20px; font-size: 14px; font-weight: 600; color: var(--text); z-index: 1000; transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); display: flex; align-items: center; gap: 10px; white-space: nowrap; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--on); }
+  .toast.error { border-color: var(--danger); }
+
+  .empty-state { text-align: center; padding: 64px 24px; color: var(--text-muted); }
+  .empty-state h3 { font-size: 18px; font-weight: 600; color: var(--text-dim); margin-bottom: 8px; }
+  .empty-state p { font-size: 14px; line-height: 1.6; }
+  .empty-state a { color: var(--accent); cursor: pointer; }
+
+  .loading { display: flex; align-items: center; justify-content: center; padding: 48px; color: var(--text-muted); font-size: 13px; gap: 12px; }
+  .spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Favourites tab management (settings drawer) ────── */
+  .fav-tab-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 6px; transition: all 0.15s;
+  }
+  .fav-tab-item-name { flex: 1; font-size: 13px; font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fav-tab-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .fav-tab-item-btn {
+    background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text-dim);
+    cursor: pointer; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; padding: 0;
+  }
+  .fav-tab-item-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .fav-tab-item-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+  .fav-tab-item-bg { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+  /* ── Tab order list (settings drawer) ───────────────── */
+  .tab-order-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 4px; transition: all 0.15s;
+  }
+  .tab-order-item .tab-order-name { flex: 1; font-size: 13px; font-weight: 600; color: var(--text); }
+  .tab-order-item .tab-order-fixed { font-size: 10px; color: var(--text-muted); }
+  .tab-order-arrows { display: flex; gap: 2px; }
+  .tab-order-arrow {
+    background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text-dim);
+    cursor: pointer; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; padding: 0; font-size: 14px;
+  }
+  .tab-order-arrow:hover { border-color: var(--accent); color: var(--accent); }
+  .tab-order-arrow:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* ── Tab drag reordering — removed, using settings arrows only ── */
+
+  /* ── Favourites tab canvas ──────────────────────────── */
+  .fav-canvas {
+    position: relative; width: 100%; aspect-ratio: 16/9; background: var(--bg2);
+    border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+  }
+  .fav-canvas-bg {
+    position: absolute; inset: 0; background-size: cover; background-position: center;
+    background-repeat: no-repeat;
+  }
+  .fav-canvas-empty {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; color: var(--text-muted); gap: 12px;
+  }
+  .fav-canvas-empty svg { opacity: 0.4; }
+  .fav-tab-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+  }
+  .fav-tab-title { font-size: 18px; font-weight: 700; color: var(--text); }
+  .fav-tab-actions { display: flex; gap: 8px; }
+
+  /* ── Rename modal ───────────────────────────────────── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 500;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal-box {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+    width: 100%; max-width: 420px; padding: 24px;
+  }
+  .modal-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 16px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+
+  /* ── Image upload area ──────────────────────────────── */
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius); padding: 24px;
+    text-align: center; cursor: pointer; transition: all 0.2s; color: var(--text-dim);
+  }
+  .upload-zone:hover { border-color: var(--accent); color: var(--accent); }
+  .upload-zone.drag-hover { border-color: var(--accent); background: rgba(0,200,255,0.05); }
+  .upload-zone-icon { margin-bottom: 8px; }
+  .upload-zone-text { font-size: 13px; font-weight: 600; }
+  .upload-zone-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+  .upload-progress { height: 4px; background: var(--bg3); border-radius: 2px; margin-top: 12px; overflow: hidden; display: none; }
+  .upload-progress-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="34" height="34">
+        <rect width="72" height="72" rx="14" fill="#0a0e14"/>
+        <path d="M8 21 Q8 12 17 12 L29 12 L29 19 L17 19 Q16 19 16 21 L16 51 Q16 53 17 53 L29 53 L29 60 L17 60 Q8 60 8 51 Z" fill="#00c8ff"/>
+        <path d="M33 12 L64 12 L64 19 L43 53 L64 53 L64 60 L33 60 L33 53 L54 19 L33 19 Z" fill="#e8f0ff"/>
+      </svg>
+    </div>
+    <span class="logo-text">CZone <span>Control</span></span>
+  </div>
+  <div class="status-pill">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">Connecting</span>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tabs-left" id="tabsLeft">
+    <!-- Tabs are now rendered dynamically by renderTabs() -->
+  </div>
+  <div class="tabs-right">
+    <div class="settings-cog" id="settingsCog" title="Settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- Settings drawer overlay -->
+<div class="settings-overlay" id="settingsOverlay"></div>
+
+<!-- Settings drawer -->
+<div class="settings-drawer" id="settingsDrawer">
+  <div class="settings-drawer-header">
+    <span class="settings-drawer-title">Settings</span>
+    <button class="settings-drawer-close" id="settingsClose">✕</button>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Navigation</div>
+    <div class="settings-nav-item" id="sNav-config">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Configure
+    </div>
+    <div class="settings-nav-item" id="sNav-theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      Theme
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">General</div>
+    <div class="settings-toggle-row">
+      <div>
+        <div class="settings-toggle-label">Modes Tab</div>
+        <div class="settings-toggle-sub">Show a tab for switching system modes</div>
+      </div>
+      <div class="pill-toggle" id="toggle-modes"></div>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title" id="circuitGroupsHeader" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+      <span>Circuit Groups</span>
+      <svg class="settings-collapse-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="transition:transform 0.2s;transform:rotate(-90deg)"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div id="circuitGroupsBody" style="display:none">
+      <div class="settings-toggle-sub" style="margin-bottom:10px">Groups organise circuits on the Control tab. Default groups come from icon categories.</div>
+      <div id="circuitGroupList"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input class="field-input" type="text" id="newGroupInput" placeholder="New group name" style="flex:1;padding:8px 10px;font-size:13px">
+        <button class="btn btn-ghost" id="btnAddGroup" style="padding:8px 12px;white-space:nowrap">+ Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Favourites Tabs</div>
+    <div id="favouritesTabList"></div>
+    <button class="btn-add" id="btnAddFavTab" style="margin-top:8px;margin-bottom:0">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Favourites Tab
+    </button>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Tab Order</div>
+    <div class="settings-toggle-sub" style="margin-bottom:10px">Use the arrows to reorder your tabs.</div>
+    <div id="tabOrderList"></div>
+  </div>
+</div>
+
+<main>
+  <div class="panel" id="panel-control"><div id="controlContent"><div class="loading"><div class="spinner"></div> Loading...</div></div></div>
+  <div class="panel active" id="panel-monitor"><div id="monitorContent"><div class="loading"><div class="spinner"></div> Loading...</div></div></div>
+  <div class="panel" id="panel-config"><div id="configContent"><div class="loading"><div class="spinner"></div> Loading...</div></div></div>
+  <div class="panel" id="panel-theme"><div id="themeContent"></div></div>
+  <!-- Dynamic favourites tab panels are inserted here by renderTabs() -->
+  <div id="dynamicPanels"></div>
+  <div class="panel" id="panel-modes"><div id="modesContent"></div></div>
+</main>
+
+<!-- Icon picker modal -->
+<div class="icon-picker-modal hidden" id="iconModal">
+  <div class="icon-picker-inner">
+    <div class="icon-picker-header">
+      <span class="icon-picker-title">Choose Icon</span>
+      <button class="btn btn-ghost" id="iconModalClose">Close</button>
+    </div>
+    <div class="icon-picker-body" id="iconModalBody"></div>
+  </div>
+</div>
+
+<!-- Trend modal -->
+<div class="modal-overlay hidden" id="trendModal">
+  <div class="trend-modal-inner">
+    <div class="trend-modal-header">
+      <span class="trend-modal-title" id="trendModalTitle">Trend</span>
+      <button class="btn btn-ghost" id="trendModalClose">Close</button>
+    </div>
+    <div class="trend-range-bar" id="trendRangeBar">
+      <button class="trend-range-btn active" data-range="1h">1 Hour</button>
+      <button class="trend-range-btn" data-range="24h">24 Hours</button>
+      <button class="trend-range-btn" data-range="7d">7 Days</button>
+      <button class="trend-range-btn" data-range="31d">31 Days</button>
+    </div>
+    <div class="trend-chart-wrap">
+      <canvas id="trendCanvas"></canvas>
+    </div>
+    <div class="trend-stats" id="trendStats"></div>
+    <div class="trend-loading hidden" id="trendLoading"><div class="spinner"></div> Loading trend data...</div>
+    <div class="trend-empty hidden" id="trendEmpty">No trend data available yet. Data is recorded every 30 seconds.</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Unit system ───────────────────────────────────────────────────────────────
+const UNIT_TYPES = {
+  voltage:     { fixed: 'V',  label: 'V',   convert: v => v.toFixed(1) },
+  current:     { fixed: 'A',  label: 'A',   convert: v => v.toFixed(1) },
+  power:       { fixed: 'W',  label: 'W',   convert: v => Math.round(v) },
+  frequency:   { fixed: 'Hz', label: 'Hz',  convert: v => parseFloat(v).toFixed(1) },
+  percent:     { fixed: '%',  label: '%',   convert: v => Math.round(v * 100) },
+  tank:        { fixed: '%',  label: '%',   convert: v => Math.round(v * 100) },
+  temperature: {
+    choices: [
+      { unit: '°C', convert: v => (v - 273.15).toFixed(1) },
+      { unit: '°F', convert: v => ((v - 273.15) * 9/5 + 32).toFixed(1) },
+    ]
+  },
+  speed: {
+    choices: [
+      { unit: 'kn',   convert: v => (v * 1.94384).toFixed(1) },
+      { unit: 'km/h', convert: v => (v * 3.6).toFixed(1) },
+      { unit: 'mph',  convert: v => (v * 2.23694).toFixed(1) },
+    ]
+  },
+  volume: {
+    choices: [
+      { unit: 'L',   convert: v => v.toFixed(1) },
+      { unit: 'gal', convert: v => (v * 0.264172).toFixed(1) },
+      { unit: 'm³',  convert: v => v.toFixed(3) },
+      { unit: '%',   convert: v => Math.round(v * 100) },
+    ]
+  },
+  value: { editable: true, convert: v => parseFloat(v).toFixed(1) },
+  pressure: {
+    choices: [
+      { unit: 'PSI',  convert: v => (v / 6894.76).toFixed(2) },
+      { unit: 'kPa',  convert: v => (v / 1000).toFixed(1) },
+      { unit: 'Bar',  convert: v => (v / 100000).toFixed(3) },
+      { unit: 'mBar', convert: v => (v / 100).toFixed(1) },
+    ]
+  },
+  atm_pressure: {
+    choices: [
+      { unit: 'mBar', convert: v => (v / 100).toFixed(1) },
+      { unit: 'hPa',  convert: v => (v / 100).toFixed(1) },
+      { unit: 'inHg', convert: v => (v / 3386.39).toFixed(2) },
+    ]
+  },
+  humidity: { fixed: '%Rh', label: '%Rh', convert: v => (v * 100).toFixed(1) },
+  rpm:      { fixed: 'RPM', label: 'RPM', convert: v => Math.round(v * 60) }, // rad/s to RPM
+  time_remaining: {
+    fixed: '\u200b',
+    convert: v => {
+      const mins = Math.floor(v / 60);
+      if (mins >= 1440) { const d = Math.floor(mins/1440); const h = Math.floor((mins%1440)/60); return `${d}d ${h}h`; }
+      const h = Math.floor(mins/60); const m = mins % 60;
+      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+  },
+};
+
+function getUnitDef(type) { return UNIT_TYPES[type] || UNIT_TYPES.value; }
+
+function unitSelectHTML(type, selectedUnit, pathKey) {
+  const def = getUnitDef(type);
+  if (def.fixed) {
+    return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:14px;color:var(--text-dim);text-align:center;font-weight:600">${def.fixed}</div>
+    <input type="hidden" class="mon-unit-field" data-path-key="${pathKey}" value="${def.fixed}">`;
+  }
+  if (def.choices) {
+    const opts = def.choices.map(c => `<option value="${c.unit}" ${c.unit===(selectedUnit||def.choices[0].unit)?'selected':''}>${c.unit}</option>`).join('');
+    return `<select class="field-select mon-unit-field" data-path-key="${pathKey}" style="text-align:center">${opts}</select>`;
+  }
+  // editable
+  return `<input class="field-input mon-unit-field" type="text" data-path-key="${pathKey}" value="${selectedUnit||''}" placeholder="unit" style="text-align:center">`;
+}
+
+function convertValue(rawVal, type, unit) {
+  const def = getUnitDef(type);
+  const n = parseFloat(rawVal);
+  if (isNaN(n)) return '—';
+  if (def.fixed !== undefined && def.convert) return def.convert(n);
+  if (def.choices) {
+    const choice = def.choices.find(c => c.unit === unit) || def.choices[0];
+    return choice.convert(n);
+  }
+  return n.toFixed(1);
+}
+
+// ── Theme ──────────────────────────────────────────────────────────────────
+const THEME_DEFAULTS = {
+  bg:'#0a0e14', bg2:'#111720', bg3:'#1a2233', border:'#243048',
+  accent:'#00c8ff', on:'#00e87a', off:'#334466', danger:'#ff4455',
+  text:'#e8f0ff', textDim:'#7a90b8', font:'system', showMeta:false, viewMode:'list'
+};
+
+const FONTS = [
+  { id:'system',  label:'System UI', stack:'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', preview:'AaBbCc 123' },
+  { id:'georgia', label:'Georgia',   stack:'Georgia, "Times New Roman", serif',                        preview:'AaBbCc 123' },
+  { id:'mono',    label:'Monospace', stack:'"Courier New", Courier, monospace',                        preview:'AaBbCc 123' },
+  { id:'tahoma',  label:'Tahoma',    stack:'Tahoma, Geneva, sans-serif',                               preview:'AaBbCc 123' },
+  { id:'verdana', label:'Verdana',   stack:'Verdana, Geneva, sans-serif',                              preview:'AaBbCc 123' },
+  { id:'impact',  label:'Impact',    stack:'Impact, "Arial Narrow", sans-serif',                       preview:'AaBbCc 123' },
+];
+
+const PRESETS = [
+  { label:'Ocean Dark',    bg:'#0a0e14', bg2:'#111720', bg3:'#1a2233', border:'#243048', accent:'#00c8ff', on:'#00e87a', off:'#334466', danger:'#ff4455', text:'#e8f0ff', textDim:'#7a90b8' },
+  { label:'Deep Red',      bg:'#110a0a', bg2:'#1c1010', bg3:'#2a1515', border:'#3d2020', accent:'#ff5533', on:'#ff8800', off:'#442222', danger:'#ff2244', text:'#ffe8e0', textDim:'#b87a70' },
+  { label:'Forest',        bg:'#080f0a', bg2:'#0f1a11', bg3:'#162419', border:'#1e3424', accent:'#44dd88', on:'#88ff44', off:'#1a3322', danger:'#ff4455', text:'#e0f0e8', textDim:'#7ab890' },
+  { label:'High Contrast', bg:'#000000', bg2:'#0a0a0a', bg3:'#141414', border:'#333333', accent:'#ffffff', on:'#00ff00', off:'#333333', danger:'#ff0000', text:'#ffffff', textDim:'#aaaaaa' },
+  { label:'Navy Gold',     bg:'#060810', bg2:'#0c1020', bg3:'#131a2e', border:'#1e2a44', accent:'#ffcc00', on:'#ffaa00', off:'#2a2200', danger:'#ff4455', text:'#fff8e0', textDim:'#aa9860' },
+  { label:'Slate',         bg:'#0e1117', bg2:'#161c26', bg3:'#1e2535', border:'#2a3548', accent:'#7c9cff', on:'#44ddaa', off:'#2a3044', danger:'#ff4455', text:'#dde4f0', textDim:'#7a88aa' },
+];
+
+// ── Circuit groups ──────────────────────────────────────────────────────────
+// Default groups come from icons.js categories; custom groups can be added in settings
+function getCircuitGroups() {
+  const defaults = (typeof ICONS !== 'undefined' && ICONS.categories) ? ICONS.categories.map(c => c.label) : [];
+  if (!defaults.includes('Mode')) defaults.push('Mode');
+  const custom = (() => { try { return JSON.parse(localStorage.getItem('czoneCircuitGroups') || '[]'); } catch(e) { return []; } })();
+  const all = [...new Set([...defaults, ...custom])];
+  // Ensure Ungrouped exists
+  if (!all.includes('Ungrouped')) all.push('Ungrouped');
+  // Sort alphabetically, but Ungrouped always last
+  all.sort((a, b) => {
+    if (a === 'Ungrouped') return 1;
+    if (b === 'Ungrouped') return -1;
+    return a.localeCompare(b);
+  });
+  return all;
+}
+
+function saveCircuitGroups(groups) {
+  // Only persist groups that aren't default icon categories
+  const defaults = (typeof ICONS !== 'undefined' && ICONS.categories) ? ICONS.categories.map(c => c.label) : [];
+  const custom = groups.filter(g => !defaults.includes(g) && g !== 'Ungrouped');
+  try { localStorage.setItem('czoneCircuitGroups', JSON.stringify(custom)); } catch(e) {}
+}
+
+function loadTheme() {
+  try { const s = localStorage.getItem('czone-theme'); return s ? {...THEME_DEFAULTS,...JSON.parse(s)} : {...THEME_DEFAULTS}; }
+  catch(e) { return {...THEME_DEFAULTS}; }
+}
+
+function saveTheme() {
+  try { localStorage.setItem('czone-theme', JSON.stringify(appState.theme)); } catch(e) {}
+  applyTheme();
+}
+
+function applyTheme() {
+  const t = appState.theme, r = document.documentElement;
+  const adj = (hex, n) => { try { const x = v => Math.max(0,Math.min(255,parseInt(hex.slice(v,v+2),16)+n)); return `#${x(1).toString(16).padStart(2,'0')}${x(3).toString(16).padStart(2,'0')}${x(5).toString(16).padStart(2,'0')}`; } catch(e){return hex;} };
+  r.style.setProperty('--bg', t.bg); r.style.setProperty('--bg2', t.bg2); r.style.setProperty('--bg3', t.bg3);
+  r.style.setProperty('--border', t.border); r.style.setProperty('--accent', t.accent);
+  r.style.setProperty('--accent2', adj(t.accent,-30)); r.style.setProperty('--on', t.on);
+  r.style.setProperty('--on-dim', adj(t.on,-40)); r.style.setProperty('--off', t.off);
+  r.style.setProperty('--danger', t.danger); r.style.setProperty('--text', t.text);
+  r.style.setProperty('--text-dim', t.textDim); r.style.setProperty('--text-muted', adj(t.textDim,-30));
+  const font = FONTS.find(f=>f.id===t.font)||FONTS[0];
+  r.style.setProperty('--font', font.stack);
+  document.body.style.fontFamily = font.stack;
+}
+
+// ── App state ──────────────────────────────────────────────────────────────
+const appState = {
+  config: { switches:[], monitorItems:[], favouriteTabs:[], statusBroadcastRate:0 },
+  availablePaths: [], liveState: {}, monitorValues: {},
+  settings: JSON.parse(localStorage.getItem('czoneSettings')||'{"showModes":false,"tabOrder":[]}'),
+  pollTimer: null, theme: loadTheme(),
+  iconPickerCallback: null,
+  activeTab: 'monitor'
+};
+
+// ── API ────────────────────────────────────────────────────────────────────
+// Derive base URL from current page location so API calls always go to the right place
+// Build BASE URL from current location — works whether served via /plugins/ or direct webapp path
+const BASE = window.location.protocol + '//' + window.location.host + '/plugins/signalk-czone-switch-control/';
+async function api(method, path, body) {
+  const opts = { method, headers:{'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(BASE + path, opts);
+  if (!r.ok) { const e = await r.json().catch(()=>({error:r.statusText})); throw new Error(e.error||r.statusText); }
+  return r.json();
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+async function init() {
+  applyTheme();
+  renderTheme();
+  try {
+    const [config, paths, discovered] = await Promise.all([api('GET','api/config'), api('GET','api/switches'), api('GET','api/paths').catch(()=>({batteries:[],tanks:[],temperatures:[],other:[]}))]);
+    appState.config = config;
+    if (!appState.config.favouriteTabs) appState.config.favouriteTabs = [];
+    appState.availablePaths = paths;
+    appState.discoveredPaths = discovered;
+    setStatus(true);
+    renderTabs();
+    renderControl();
+    renderMonitor();
+    renderModes();
+    renderConfig();
+    startPolling();
+  } catch(e) {
+    setStatus(false);
+    document.getElementById('controlContent').innerHTML = `<div class="empty-state"><h3>Connection Failed</h3><p>Could not connect to the CZone plugin.<br>Make sure Signal K is running and the plugin is enabled.</p></div>`;
+  }
+}
+
+function setStatus(online) {
+  document.getElementById('statusDot').classList.toggle('online', online);
+  document.getElementById('statusText').textContent = online ? 'Online' : 'Offline';
+}
+
+function startPolling() {
+  if (appState.pollTimer) clearInterval(appState.pollTimer);
+  appState.pollTimer = setInterval(async () => {
+    try {
+      const state = await api('GET','api/state');
+      appState.liveState = state;
+      updateControlItems();
+      setStatus(true);
+    } catch(e) { setStatus(false); }
+
+    // Fetch monitor values directly from SK REST API — browser is already authenticated
+    try {
+      const items = appState.config.monitorItems || [];
+      const PATH_KEYS = ['signalkPath','voltagePath','currentPath','socPath','tempPath',
+                         'timeRemainingPath','levelPath','speedPath','powerPath','freqPath',
+                         'oilTempPath','coolantPath','oilPressPath','rpmPath','gearboxTempPath',
+                         'gearboxPressPath','humidityPath','pressurePath'];
+      const paths = new Set();
+      items.forEach(item => PATH_KEYS.forEach(k => { if (item[k]) paths.add(item[k]); }));
+
+      const skBase = window.location.protocol + '//' + window.location.host;
+      const results = await Promise.all([...paths].map(skPath =>
+        fetch(`${skBase}/signalk/v1/api/vessels/self/${skPath.split('.').join('/')}`, { cache: 'no-store' })
+          .then(r => (r.status === 200 || r.status === 304) ? r.text() : null)
+          .then(t => { try { const d = JSON.parse(t); return { skPath, value: d && d.value !== undefined ? d.value : undefined }; } catch(e) { return { skPath, value: undefined }; } })
+          .catch(() => ({ skPath, value: undefined }))
+      ));
+      results.forEach(({ skPath, value }) => {
+        if (value !== undefined) appState.monitorValues[skPath] = value;
+      });
+      console.log('monitorValues:', JSON.stringify(appState.monitorValues));
+      updateMonitorCards();
+    } catch(e) { /* monitor fetch failed silently */ }
+  }, 1500);
+}
+
+// ── Tabs & Settings drawer ─────────────────────────────────────────────────
+function saveSettings() {
+  localStorage.setItem('czoneSettings', JSON.stringify(appState.settings));
+}
+
+// Generate unique ID for new favourites tabs
+function genFavId() { return 'fav-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+// Get ordered list of tab definitions
+function getTabDefs() {
+  const fixed = [
+    { id: 'control', label: 'Control', removable: false },
+    { id: 'monitor', label: 'Monitor', removable: false },
+  ];
+  const favTabs = (appState.config.favouriteTabs || []).map(ft => ({
+    id: ft.id, label: ft.name || 'Favourites', removable: false, isFav: true
+  }));
+  const modes = appState.settings.showModes ? [{ id: 'modes', label: 'Modes', removable: false }] : [];
+  const allTabs = [...fixed, ...favTabs, ...modes];
+
+  // Apply custom order
+  const order = appState.settings.tabOrder || [];
+  if (order.length > 0) {
+    const ordered = [];
+    order.forEach(id => {
+      const t = allTabs.find(x => x.id === id);
+      if (t) ordered.push(t);
+    });
+    // Append any tabs not in the saved order (newly added)
+    allTabs.forEach(t => { if (!ordered.find(x => x.id === t.id)) ordered.push(t); });
+    return ordered;
+  }
+  return allTabs;
+}
+
+function saveTabOrder(tabs) {
+  appState.settings.tabOrder = tabs.map(t => t.id);
+  saveSettings();
+}
+
+// ── Render the tab bar dynamically ─────────────────────────────────────────
+function renderTabs() {
+  const container = document.getElementById('tabsLeft');
+  const tabs = getTabDefs();
+  container.innerHTML = '';
+
+  tabs.forEach((t, i) => {
+    if (i > 0) {
+      const sep = document.createElement('div');
+      sep.className = 'tab-sep';
+      container.appendChild(sep);
+    }
+    const el = document.createElement('div');
+    el.className = 'tab' + (t.id === appState.activeTab ? ' active' : '');
+    el.dataset.panel = t.id;
+    el.dataset.tabId = t.id;
+    el.textContent = t.label;
+
+    // Click to switch
+    el.addEventListener('click', () => {
+      switchPanel(t.id);
+    });
+
+    container.appendChild(el);
+  });
+
+  // Ensure favourites panels exist
+  renderFavouritePanels();
+  // Update settings drawer lists
+  renderFavTabList();
+  renderTabOrderList();
+}
+
+// ── Favourites panel rendering ─────────────────────────────────────────────
+function renderFavouritePanels() {
+  const container = document.getElementById('dynamicPanels');
+  const favTabs = appState.config.favouriteTabs || [];
+
+  // Remove panels that no longer exist
+  container.querySelectorAll('.panel[data-fav-id]').forEach(p => {
+    if (!favTabs.find(ft => ft.id === p.dataset.favId)) p.remove();
+  });
+
+  // Create or update panels for each fav tab
+  favTabs.forEach(ft => {
+    let panel = container.querySelector(`.panel[data-fav-id="${ft.id}"]`);
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.className = 'panel';
+      panel.id = 'panel-' + ft.id;
+      panel.dataset.favId = ft.id;
+      container.appendChild(panel);
+    }
+    // Check if this is the active panel
+    if (appState.activeTab === ft.id) panel.classList.add('active');
+    else panel.classList.remove('active');
+
+    renderFavouriteContent(ft, panel);
+  });
+}
+
+function renderFavouriteContent(favTab, panel) {
+  const bgUrl = favTab.background ? `${BASE}api/storage/image/${encodeURIComponent(favTab.background)}` : null;
+  let html = '';
+
+  html += `<div class="fav-canvas">`;
+  if (bgUrl) {
+    html += `<div class="fav-canvas-bg" style="background-image:url('${bgUrl}')"></div>`;
+  }
+  if (!bgUrl) {
+    html += `<div class="fav-canvas-empty">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>
+      <div style="font-size:14px;font-weight:600">No background image set</div>
+      <div style="font-size:12px">Add a background image via Settings → Favourites Tabs</div>
+    </div>`;
+  }
+  html += `</div>`;
+
+  panel.innerHTML = html;
+}
+
+// ── Image upload flow ──────────────────────────────────────────────────────
+async function openImageUpload(favId) {
+  try {
+    const status = await api('GET', 'api/storage/status');
+    const storageNote = status.location === 'sd'
+      ? `Saving to SD card · ${status.freeMB} MB free`
+      : `Saving to internal storage (insert SD card for external storage)`;
+
+    showModal('Upload Background Image',
+      `<div class="upload-zone" id="uploadZone">
+        <div class="upload-zone-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="upload-zone-text">Tap to select an image or drag & drop</div>
+        <div class="upload-zone-sub">JPEG, PNG, WebP, GIF · Max 3 MB · 16:9 recommended</div>
+        <div class="upload-progress" id="uploadProgress"><div class="upload-progress-bar" id="uploadProgressBar"></div></div>
+      </div>
+      <input type="file" id="uploadFileInput" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none">
+      <div style="color:var(--text-muted);font-size:11px;margin-top:10px">${storageNote}</div>`,
+      [{ label: 'Cancel', action: 'close' }]
+    );
+
+    const zone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('uploadFileInput');
+
+    zone.addEventListener('click', () => fileInput.click());
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-hover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-hover'));
+    zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-hover'); if (e.dataTransfer.files.length) handleImageFile(e.dataTransfer.files[0], favId); });
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleImageFile(fileInput.files[0], favId); });
+
+    // Also show existing images if any
+    if (status.images && status.images.length > 0) {
+      const existing = document.createElement('div');
+      existing.style.cssText = 'margin-top:16px';
+      existing.innerHTML = `<div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Or use existing image</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px">
+          ${status.images.map(img => `<div class="existing-img-opt" data-img="${img}" style="aspect-ratio:16/9;background:url('${BASE}api/storage/image/${encodeURIComponent(img)}') center/cover;border:1px solid var(--border);border-radius:4px;cursor:pointer;transition:all 0.15s" title="${img}"></div>`).join('')}
+        </div>`;
+      document.querySelector('.modal-box').insertBefore(existing, document.querySelector('.modal-actions'));
+      existing.querySelectorAll('.existing-img-opt').forEach(opt => {
+        opt.addEventListener('click', () => {
+          setFavBackground(favId, opt.dataset.img);
+          closeModal();
+        });
+      });
+    }
+  } catch (e) {
+    showToast('Error checking storage: ' + e.message, 'error');
+  }
+}
+
+async function handleImageFile(file, favId) {
+  if (file.size > 3 * 1024 * 1024) { showToast('Image exceeds 3 MB limit', 'error'); return; }
+  if (!file.type.match(/^image\/(jpeg|png|webp|gif)$/)) { showToast('Unsupported image format', 'error'); return; }
+
+  const progress = document.getElementById('uploadProgress');
+  const bar = document.getElementById('uploadProgressBar');
+  if (progress) progress.style.display = 'block';
+  if (bar) bar.style.width = '20%';
+
+  try {
+    // Compress image client-side using canvas (max 1280x720, JPEG 75%)
+    const compressed = await compressImage(file, 1280, 720, 0.75);
+    if (bar) bar.style.width = '50%';
+
+    // Send as JSON with base64 data
+    const r = await fetch(BASE + 'api/storage/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: file.name, data: compressed.base64 })
+    });
+    if (bar) bar.style.width = '80%';
+    const result = await r.json();
+    if (!r.ok) throw new Error(result.error || 'Upload failed');
+    if (bar) bar.style.width = '100%';
+
+    setFavBackground(favId, result.filename);
+    closeModal();
+    showToast(`Image uploaded (${result.sizeKB} KB)`, 'success');
+  } catch (e) {
+    showToast('Upload failed: ' + e.message, 'error');
+    if (progress) progress.style.display = 'none';
+  }
+}
+
+// Compress/resize image using canvas, returns { base64, sizeKB }
+function compressImage(file, maxW, maxH, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > maxW || h > maxH) {
+          const ratio = Math.min(maxW / w, maxH / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        const base64 = dataUrl.split(',')[1];
+        resolve({ base64, sizeKB: Math.round(base64.length * 0.75 / 1024) });
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function setFavBackground(favId, filename) {
+  const favTabs = appState.config.favouriteTabs || [];
+  const tab = favTabs.find(ft => ft.id === favId);
+  if (!tab) return;
+  tab.background = filename;
+  await saveConfigSilent();
+  renderTabs();
+  switchPanel(favId);
+}
+
+async function removeFavBackground(favId) {
+  const favTabs = appState.config.favouriteTabs || [];
+  const tab = favTabs.find(ft => ft.id === favId);
+  if (!tab || !tab.background) return;
+  tab.background = null;
+  await saveConfigSilent();
+  renderTabs();
+  switchPanel(favId);
+  showToast('Background removed', 'success');
+}
+
+// Save config without toast (used for fav tab updates)
+async function saveConfigSilent() {
+  try {
+    const newConfig = { ...appState.config };
+    await api('POST', 'api/config', newConfig);
+  } catch(e) { showToast('Error saving: ' + e.message, 'error'); }
+}
+
+// ── Modal system ──────────────────────────────────────────────────────────
+function showModal(title, bodyHtml, buttons) {
+  let modal = document.getElementById('genericModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'genericModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+  modal.classList.remove('hidden');
+  modal.innerHTML = `<div class="modal-box">
+    <div class="modal-title">${title}</div>
+    <div class="modal-body">${bodyHtml}</div>
+    <div class="modal-actions">
+      ${(buttons||[]).map(b => `<button class="btn ${b.primary?'btn-primary':'btn-ghost'} modal-btn" data-action="${b.action}">${b.label}</button>`).join('')}
+    </div>
+  </div>`;
+  modal.querySelectorAll('.modal-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.action === 'close') closeModal();
+      if (btn.dataset.action && typeof window['modalAction_'+btn.dataset.action] === 'function') window['modalAction_'+btn.dataset.action]();
+    });
+  });
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+}
+
+function closeModal() {
+  const modal = document.getElementById('genericModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+// ── Favourites tab management (settings drawer) ──────────────────────────
+function renderFavTabList() {
+  const el = document.getElementById('favouritesTabList');
+  if (!el) return;
+  const favTabs = appState.config.favouriteTabs || [];
+  if (favTabs.length === 0) {
+    el.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No favourites tabs yet. Add one below.</div>`;
+    return;
+  }
+  el.innerHTML = favTabs.map(ft => `
+    <div class="fav-tab-item" data-fav-id="${ft.id}">
+      <div style="flex:1;min-width:0">
+        <div class="fav-tab-item-name">${ft.name || 'Untitled'}</div>
+        <div class="fav-tab-item-bg">${ft.background ? '📷 ' + ft.background : 'No background'}</div>
+      </div>
+      <div class="fav-tab-item-actions">
+        <button class="fav-tab-item-btn fav-edit-btn" data-fav-id="${ft.id}" title="Edit">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </button>
+        <button class="fav-tab-item-btn danger fav-delete-btn" data-fav-id="${ft.id}" title="Delete">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+    </div>
+  `).join('');
+
+  el.querySelectorAll('.fav-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => editFavTab(btn.dataset.favId));
+  });
+  el.querySelectorAll('.fav-delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteFavTab(btn.dataset.favId));
+  });
+}
+
+async function addFavTab() {
+  if (!appState.config.favouriteTabs) appState.config.favouriteTabs = [];
+  const newTab = { id: genFavId(), name: 'Favourites ' + (appState.config.favouriteTabs.length + 1), background: null, controls: [] };
+  appState.config.favouriteTabs.push(newTab);
+  // Add to tab order
+  const order = appState.settings.tabOrder || getTabDefs().map(t => t.id);
+  // Insert before modes if it exists, otherwise at end
+  const modesIdx = order.indexOf('modes');
+  if (modesIdx >= 0) order.splice(modesIdx, 0, newTab.id);
+  else order.push(newTab.id);
+  appState.settings.tabOrder = order;
+  saveSettings();
+
+  await saveConfigSilent();
+  renderTabs();
+  showToast(`"${newTab.name}" tab added`, 'success');
+}
+
+function editFavTab(favId) {
+  const favTabs = appState.config.favouriteTabs || [];
+  const tab = favTabs.find(ft => ft.id === favId);
+  if (!tab) return;
+
+  const bgUrl = tab.background ? `${BASE}api/storage/image/${encodeURIComponent(tab.background)}` : null;
+  const bgPreview = bgUrl
+    ? `<div style="aspect-ratio:16/9;background:url('${bgUrl}') center/cover;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px"></div>
+       <div style="display:flex;gap:8px">
+         <button class="btn btn-ghost" id="editChangeImg" style="flex:1">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+           Change Image
+         </button>
+         <button class="btn btn-ghost" id="editRemoveImg" style="color:var(--danger)">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+           Remove
+         </button>
+       </div>`
+    : `<button class="btn btn-ghost" id="editAddImg" style="width:100%">
+         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+         Add Background Image
+       </button>`;
+
+  showModal('Edit Tab',
+    `<div class="field-group" style="margin-bottom:16px">
+      <label class="field-label">Tab Name</label>
+      <input class="field-input" type="text" id="renameInput" value="${tab.name || ''}" placeholder="e.g. Helm Station" maxlength="30">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Background Image</label>
+      <div style="margin-top:6px">${bgPreview}</div>
+    </div>`,
+    [{ label: 'Cancel', action: 'close' }, { label: 'Save', action: 'save', primary: true }]
+  );
+  document.getElementById('renameInput').focus();
+  document.getElementById('renameInput').select();
+
+  // Save name
+  window.modalAction_save = async () => {
+    const val = document.getElementById('renameInput').value.trim();
+    if (!val) { showToast('Name cannot be empty', 'error'); return; }
+    tab.name = val;
+    await saveConfigSilent();
+    closeModal();
+    renderTabs();
+    showToast('Tab updated', 'success');
+  };
+  document.getElementById('renameInput').addEventListener('keydown', e => { if (e.key === 'Enter') window.modalAction_save(); });
+
+  // Image buttons
+  const changeBtn = document.getElementById('editChangeImg');
+  const removeBtn = document.getElementById('editRemoveImg');
+  const addBtn = document.getElementById('editAddImg');
+  if (changeBtn) changeBtn.addEventListener('click', () => { closeModal(); openImageUpload(favId); });
+  if (addBtn) addBtn.addEventListener('click', () => { closeModal(); openImageUpload(favId); });
+  if (removeBtn) removeBtn.addEventListener('click', async () => {
+    tab.background = null;
+    await saveConfigSilent();
+    closeModal();
+    renderTabs();
+    showToast('Background removed', 'success');
+  });
+}
+
+async function deleteFavTab(favId) {
+  const favTabs = appState.config.favouriteTabs || [];
+  const idx = favTabs.findIndex(ft => ft.id === favId);
+  if (idx < 0) return;
+  const name = favTabs[idx].name || 'Untitled';
+
+  showModal('Delete Tab',
+    `<p style="color:var(--text-dim);font-size:14px">Are you sure you want to delete <strong>"${name}"</strong>?</p>
+     <p style="color:var(--text-muted);font-size:12px;margin-top:8px">This will remove the tab and any control positions. Background images on the SD card will not be deleted.</p>`,
+    [{ label: 'Cancel', action: 'close' }, { label: 'Delete', action: 'delete', primary: true }]
+  );
+
+  window.modalAction_delete = async () => {
+    favTabs.splice(idx, 1);
+    // Remove from tab order
+    if (appState.settings.tabOrder) {
+      appState.settings.tabOrder = appState.settings.tabOrder.filter(id => id !== favId);
+      saveSettings();
+    }
+    // If this tab was active, go back to control
+    if (appState.activeTab === favId) switchPanel('control');
+    await saveConfigSilent();
+    closeModal();
+    renderTabs();
+    showToast(`"${name}" deleted`, 'success');
+  };
+}
+
+// ── Tab order list (settings drawer) ──────────────────────────────────────
+function renderTabOrderList() {
+  const el = document.getElementById('tabOrderList');
+  if (!el) return;
+  const tabs = getTabDefs();
+
+  el.innerHTML = tabs.map((t, i) => `
+    <div class="tab-order-item" data-tab-id="${t.id}">
+      <div class="tab-order-name">${t.label}</div>
+      <div class="tab-order-arrows">
+        <button class="tab-order-arrow" data-dir="up" data-idx="${i}" ${i===0?'disabled':''}>▲</button>
+        <button class="tab-order-arrow" data-dir="down" data-idx="${i}" ${i===tabs.length-1?'disabled':''}>▼</button>
+      </div>
+    </div>
+  `).join('');
+
+  el.querySelectorAll('.tab-order-arrow').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      const dir = btn.dataset.dir;
+      const order = getTabDefs().map(t => t.id);
+      if (dir === 'up' && idx > 0) { [order[idx-1], order[idx]] = [order[idx], order[idx-1]]; }
+      if (dir === 'down' && idx < order.length-1) { [order[idx], order[idx+1]] = [order[idx+1], order[idx]]; }
+      appState.settings.tabOrder = order;
+      saveSettings();
+      renderTabs();
+    });
+  });
+}
+
+// ── Circuit group management (settings drawer) ─────────────────────────────
+function renderCircuitGroupList() {
+  const el = document.getElementById('circuitGroupList');
+  if (!el) return;
+  const groups = getCircuitGroups();
+  const defaults = (typeof ICONS !== 'undefined' && ICONS.categories) ? ICONS.categories.map(c => c.label) : [];
+
+  el.innerHTML = groups.map(g => {
+    const isDefault = defaults.includes(g) || g === 'Ungrouped' || g === 'Mode';
+    return `
+    <div class="fav-tab-item" style="padding:8px 12px">
+      <div class="fav-tab-item-name">${g}</div>
+      ${isDefault
+        ? '<span style="font-size:10px;color:var(--text-muted)">Default</span>'
+        : `<button class="fav-tab-item-btn danger group-delete-btn" data-group="${g}" title="Delete">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>`
+      }
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.group-delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.group;
+      // Check if any circuits use this group
+      const inUse = (appState.config.switches || []).some(sw => sw.circuitGroup === name);
+      if (inUse) {
+        showToast(`"${name}" is in use — reassign circuits first`, 'error');
+        return;
+      }
+      const custom = (() => { try { return JSON.parse(localStorage.getItem('czoneCircuitGroups') || '[]'); } catch(e) { return []; } })();
+      saveCircuitGroups(custom.filter(g => g !== name));
+      renderCircuitGroupList();
+      showToast(`"${name}" removed`, 'success');
+    });
+  });
+}
+
+function switchPanel(name) {
+  appState.activeTab = name;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.panel === name || t.dataset.tabId === name));
+  document.querySelectorAll('.panel').forEach(p => {
+    const pid = p.id.replace('panel-','');
+    p.classList.toggle('active', pid === name);
+  });
+}
+
+function switchTab(name) { switchPanel(name); }
+
+function openSettings() {
+  document.getElementById('settingsDrawer').classList.add('open');
+  document.getElementById('settingsOverlay').classList.add('open');
+  document.getElementById('settingsCog').classList.add('active');
+  renderFavTabList();
+  renderTabOrderList();
+  renderCircuitGroupList();
+}
+
+function closeSettings() {
+  document.getElementById('settingsDrawer').classList.remove('open');
+  document.getElementById('settingsOverlay').classList.remove('open');
+  document.getElementById('settingsCog').classList.remove('active');
+}
+
+// Settings cog
+document.getElementById('settingsCog').addEventListener('click', openSettings);
+document.getElementById('settingsClose').addEventListener('click', closeSettings);
+document.getElementById('settingsOverlay').addEventListener('click', closeSettings);
+
+// Settings nav items — open the relevant panel and close drawer
+document.getElementById('sNav-config').addEventListener('click', () => { closeSettings(); switchTab('config'); if(typeof renderConfig==='function') renderConfig(); });
+document.getElementById('sNav-theme').addEventListener('click',  () => { closeSettings(); switchTab('theme');  if(typeof renderTheme==='function')  renderTheme(); });
+
+// Modes toggle
+document.getElementById('toggle-modes').addEventListener('click', () => {
+  appState.settings.showModes = !appState.settings.showModes;
+  document.getElementById('toggle-modes').classList.toggle('on', appState.settings.showModes);
+  saveSettings(); renderTabs();
+});
+
+// Add favourites tab button
+document.getElementById('btnAddFavTab').addEventListener('click', addFavTab);
+
+// Circuit group management
+document.getElementById('btnAddGroup').addEventListener('click', () => {
+  const input = document.getElementById('newGroupInput');
+  const name = input.value.trim();
+  if (!name) return;
+  const groups = getCircuitGroups();
+  if (groups.includes(name)) { showToast('Group already exists', 'error'); return; }
+  const custom = (() => { try { return JSON.parse(localStorage.getItem('czoneCircuitGroups') || '[]'); } catch(e) { return []; } })();
+  custom.push(name);
+  saveCircuitGroups(custom);
+  input.value = '';
+  renderCircuitGroupList();
+  showToast(`"${name}" added`, 'success');
+});
+document.getElementById('newGroupInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btnAddGroup').click();
+});
+
+// Collapsible circuit groups section
+document.getElementById('circuitGroupsHeader').addEventListener('click', () => {
+  const body = document.getElementById('circuitGroupsBody');
+  const chevron = document.querySelector('#circuitGroupsHeader .settings-collapse-chevron');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  chevron.style.transform = isOpen ? 'rotate(-90deg)' : 'rotate(0deg)';
+});
+
+// Apply on load
+document.getElementById('toggle-modes').classList.toggle('on', appState.settings.showModes);
+
+// ── Control panel ──────────────────────────────────────────────────────────
+
+// Helper: resolve label presets to ON/OFF labels
+function resolveLabels(sw) {
+  const LABEL_MAP = {
+    on_off: ['ON','OFF'], open_close: ['OPEN','CLOSE'], up_down: ['UP','DOWN'],
+    auto_manual: ['AUTO','MANUAL'], start_stop: ['START','STOP'], fwd_rev: ['FWD','REV'],
+    in_out: ['IN','OUT'], dim_up: ['DIM UP',''], dim_down: ['DIM DOWN',''],
+    dim: ['DIM',''], fwd: ['FWD',''], rev: ['REV',''],
+  };
+  if (sw.labelPreset === 'custom') return [sw.labelOn || 'ON', sw.labelOff || 'OFF'];
+  const pair = LABEL_MAP[sw.labelPreset];
+  if (pair) return pair;
+  return [sw.labelOn || 'ON', sw.labelOff || 'OFF'];
+}
+
+// Helper: create a single switch DOM element (shared by Control + Modes tabs)
+function createSwitchElement(sw, isGrid) {
+  const live = appState.liveState[sw.signalkPath];
+  const isOn = live ? live.state === 'On' : false;
+  const icon = getIconSVG(sw.icon || 'switch', isGrid ? 28 : 24);
+  const metaHtml = appState.theme.showMeta ? `<div class="${isGrid?'card-meta':'row-meta'}">Inst ${sw.czoneInstance} · Ch ${sw.czoneChannel}</div>` : '';
+  const name = sw.name || sw.signalkPath.split('.').slice(-2)[0];
+  const isMomentary = sw.switchType === 'momentary';
+  const [labelOn, labelOff] = resolveLabels(sw);
+  const stateLabel = isOn ? labelOn : labelOff;
+  const isMode = sw.circuitType === 'mode';
+
+  const el = document.createElement('div');
+  if (isGrid) {
+    el.className = `circuit-card ${isOn?'on':''}${isMomentary?' momentary':''}`;
+    el.dataset.path = sw.signalkPath;
+    el.dataset.momentary = isMomentary ? '1' : '';
+    el.innerHTML = `
+      <div class="card-icon">${icon}</div>
+      <div class="card-name">${name}</div>
+      ${isMode ? '' : `<div class="card-readings">
+        <span class="row-reading">A: <span class="card-reading-val card-amps">—</span></span>
+        <span class="row-reading">V: <span class="card-reading-val card-volts">—</span></span>
+      </div>`}
+      ${metaHtml}
+      <div class="card-footer">
+        <span class="card-state-label">${stateLabel}</span>
+        <div class="toggle-switch${isMomentary?' toggle-momentary':''}"></div>
+      </div>`;
+  } else {
+    el.className = `circuit-row ${isOn?'on':''}${isMomentary?' momentary':''}`;
+    el.dataset.path = sw.signalkPath;
+    el.dataset.momentary = isMomentary ? '1' : '';
+    el.innerHTML = `
+      <div class="row-icon">${icon}</div>
+      <div class="row-info">
+        <div class="row-name">${name}</div>
+        ${isMode ? '' : `<div class="row-readings">
+          <span class="row-reading">Current: <span class="row-reading-val row-amps">—</span> A</span>
+          <span class="row-reading">Voltage: <span class="row-reading-val row-volts">—</span> V</span>
+        </div>`}
+        ${metaHtml}
+      </div>
+      <div class="row-right">
+        <span class="row-state-label">${stateLabel}</span>
+        <div class="toggle-switch${isMomentary?' toggle-momentary':''}"></div>
+      </div>`;
+  }
+  el.addEventListener('click', () => {
+    const isOn = el.classList.contains('on');
+    if (isMomentary) {
+      toggleCircuit(sw.signalkPath, true);
+      setTimeout(() => toggleCircuit(sw.signalkPath, false), 600);
+    } else if (sw.switchType === 'sequential') {
+      toggleCircuit(sw.signalkPath, !isOn);
+    } else {
+      toggleCircuit(sw.signalkPath, !isOn);
+    }
+  });
+  return el;
+}
+
+// Track collapsed groups in localStorage
+function getCollapsedGroups() {
+  try { return JSON.parse(localStorage.getItem('czoneCollapsedGroups') || '{}'); } catch(e) { return {}; }
+}
+function setCollapsedGroups(state) {
+  try { localStorage.setItem('czoneCollapsedGroups', JSON.stringify(state)); } catch(e) {}
+}
+
+function renderControl() {
+  const el = document.getElementById('controlContent');
+  const allSwitches = appState.config.switches || [];
+  // Only show standard circuits on Control tab
+  const switches = allSwitches.filter(sw => sw.circuitType !== 'mode');
+  if (switches.length === 0) {
+    el.innerHTML = `<div class="empty-state"><h3>No circuits configured</h3><p>Go to the <a onclick="switchTab('config')">Configure tab</a> to add your CZone circuits.</p></div>`;
+    return;
+  }
+
+  const isGrid = appState.theme.viewMode === 'grid';
+  const collapsed = getCollapsedGroups();
+
+  // Group switches by circuitGroup
+  const groups = {};
+  switches.forEach(sw => {
+    const group = sw.circuitGroup || 'Ungrouped';
+    if (!groups[group]) groups[group] = [];
+    groups[group].push(sw);
+  });
+
+  const groupNames = Object.keys(groups);
+  // If only one group, skip headers
+  const showHeaders = groupNames.length > 1 || (groupNames.length === 1 && groupNames[0] !== 'Ungrouped');
+
+  el.innerHTML = '';
+
+  groupNames.forEach(groupName => {
+    const isCollapsed = collapsed[groupName] === true;
+
+    if (showHeaders) {
+      const header = document.createElement('div');
+      header.className = 'circuit-group-header' + (isCollapsed ? ' collapsed' : '');
+      header.innerHTML = `
+        <span class="circuit-group-label">${groupName}</span>
+        <span class="circuit-group-count">${groups[groupName].length}</span>
+        <svg class="circuit-group-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+      header.addEventListener('click', () => {
+        const c = getCollapsedGroups();
+        c[groupName] = !c[groupName];
+        setCollapsedGroups(c);
+        renderControl();
+      });
+      el.appendChild(header);
+    }
+
+    if (!isCollapsed) {
+      const container = document.createElement('div');
+      container.className = isGrid ? 'circuit-grid' : 'circuit-list';
+      groups[groupName].forEach(sw => {
+        container.appendChild(createSwitchElement(sw, isGrid));
+      });
+      el.appendChild(container);
+    }
+  });
+}
+
+// ── Modes panel ───────────────────────────────────────────────────────────
+function renderModes() {
+  const el = document.getElementById('modesContent');
+  const allSwitches = appState.config.switches || [];
+  const modes = allSwitches.filter(sw => sw.circuitType === 'mode');
+
+  if (modes.length === 0) {
+    el.innerHTML = `<div class="empty-state"><h3>No modes configured</h3><p>Set a circuit's type to "Mode" in the <a onclick="switchTab('config')">Configure tab</a> to add it here.</p><p style="margin-top:8px;font-size:12px;color:var(--text-muted)">Modes will eventually control groups of circuits in a single action.</p></div>`;
+    return;
+  }
+
+  const isGrid = appState.theme.viewMode === 'grid';
+  el.innerHTML = '';
+  const container = document.createElement('div');
+  container.className = isGrid ? 'circuit-grid' : 'circuit-list';
+  modes.forEach(sw => {
+    container.appendChild(createSwitchElement(sw, isGrid));
+  });
+  el.appendChild(container);
+}
+
+// Track consecutive state readings for debounce — only flip UI after 3 consistent polls
+const stateDebounce = new Map(); // path → { state, count }
+const initialLoadDone = new Set(); // paths that have had their first state applied
+
+function updateControlItems() {
+  const isGrid = appState.theme.viewMode === 'grid';
+  const switches = appState.config.switches || [];
+  document.querySelectorAll('.circuit-card, .circuit-row').forEach(el => {
+    const path = el.dataset.path;
+    if (recentToggles.has(path)) return;
+    const live = appState.liveState[path];
+    const newIsOn = live ? live.state === 'On' : false;
+    const wasOn = el.classList.contains('on');
+
+    // First reading for this path — apply immediately, no debounce
+    if (!initialLoadDone.has(path)) {
+      if (!live) return; // no data yet — don't mark as loaded
+      initialLoadDone.add(path);
+      if (newIsOn !== wasOn) {
+        el.classList.toggle('on', newIsOn);
+        const sw = switches.find(s => s.signalkPath === path);
+        const [labelOn, labelOff] = sw ? resolveLabels(sw) : ['ON', 'OFF'];
+        const lbl = el.querySelector(isGrid ? '.card-state-label' : '.row-state-label');
+        if (lbl) lbl.textContent = newIsOn ? labelOn : labelOff;
+      }
+      return;
+    }
+
+    // Debounce: only flip if we've seen the same new state 3 polls in a row
+    if (newIsOn !== wasOn) {
+      const db = stateDebounce.get(path);
+      if (!db || db.state !== newIsOn) {
+        stateDebounce.set(path, { state: newIsOn, count: 1 });
+        return;
+      }
+      if (db.count < 2) {
+        db.count++;
+        return;
+      }
+      el.classList.toggle('on', newIsOn);
+      const sw = switches.find(s => s.signalkPath === path);
+      const [labelOn, labelOff] = sw ? resolveLabels(sw) : ['ON', 'OFF'];
+      const lbl = el.querySelector(isGrid ? '.card-state-label' : '.row-state-label');
+      if (lbl) lbl.textContent = newIsOn ? labelOn : labelOff;
+      stateDebounce.delete(path);
+    } else {
+      stateDebounce.delete(path);
+    }
+  });
+}
+
+const recentToggles = new Map(); // path → expected state, cleared after SK confirms
+
+async function toggleCircuit(signalkPath, newState) {
+  const el = document.querySelector(`[data-path="${signalkPath}"]`);
+  const isGrid = appState.theme.viewMode === 'grid';
+  const sw = (appState.config.switches || []).find(s => s.signalkPath === signalkPath);
+  const [labelOn, labelOff] = sw ? resolveLabels(sw) : ['ON', 'OFF'];
+  if (el) {
+    el.classList.toggle('on', newState);
+    const lbl = el.querySelector(isGrid ? '.card-state-label' : '.row-state-label');
+    if (lbl) lbl.textContent = newState ? labelOn : labelOff;
+  }
+  // Lock this path from poll overrides for 30 seconds
+  recentToggles.set(signalkPath, newState);
+  stateDebounce.delete(signalkPath); // clear any pending debounce
+  setTimeout(() => recentToggles.delete(signalkPath), 30000);
+  try {
+    await api('POST', 'api/switch', { signalkPath, value: newState ? 1 : 0 });
+  } catch(e) {
+    recentToggles.delete(signalkPath);
+    if (el) {
+      el.classList.toggle('on', !newState);
+      const lbl = el.querySelector(isGrid ? '.card-state-label' : '.row-state-label');
+      if (lbl) lbl.textContent = !newState ? labelOn : labelOff;
+    }
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+// ── Monitor panel ──────────────────────────────────────────────────────────
+function renderMonitor() {
+  const el = document.getElementById('monitorContent');
+  const items = appState.config.monitorItems || [];
+  if (items.length === 0) {
+    el.innerHTML = `<div class="empty-state"><h3>No monitor items configured</h3><p>Go to the <a onclick="switchTab('config')">Configure tab</a> to add battery, tank and sensor readings.</p></div>`;
+    return;
+  }
+
+  // Group by category
+  const groups = {};
+  items.forEach(item => {
+    const cat = item.category || 'Other';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(item);
+  });
+
+  let html = '';
+  Object.entries(groups).forEach(([cat, catItems]) => {
+    html += `<div class="monitor-section-header">${cat}</div>`;
+    const isGrid = appState.theme.viewMode === 'grid';
+    html += `<div class="${isGrid ? 'monitor-grid' : 'monitor-list'}">`;
+    catItems.forEach(item => {
+      html += monitorCard(item, isGrid);
+    });
+    html += `</div>`;
+  });
+  el.innerHTML = html;
+
+  // Wire trend buttons via delegation
+  el.querySelectorAll('.trend-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openTrendModal(btn.dataset.path, btn.dataset.label);
+    });
+  });
+}
+
+// Map from pathKey to { type, label } for rendering
+const PATH_KEY_META = {
+  voltagePath:      { type: 'voltage',     label: 'Voltage' },
+  currentPath:      { type: 'current',     label: 'Current' },
+  socPath:          { type: 'percent',     label: 'SOC' },
+  tempPath:         { type: 'temperature', label: 'Temp' },
+  levelPath:        { type: 'volume',      label: 'Level' },
+  speedPath:        { type: 'speed',       label: 'Speed' },
+  powerPath:        { type: 'power',       label: 'Power' },
+  freqPath:         { type: 'frequency',   label: 'Freq' },
+  oilTempPath:      { type: 'temperature', label: 'Oil Temp' },
+  coolantPath:      { type: 'temperature', label: 'Coolant' },
+  oilPressPath:     { type: 'pressure',    label: 'Oil Press' },
+  rpmPath:          { type: 'rpm',         label: 'RPM' },
+  gearboxTempPath:  { type: 'temperature', label: 'Gearbox Temp' },
+  gearboxPressPath: { type: 'pressure',    label: 'Gearbox Press' },
+  humidityPath:     { type: 'humidity',    label: 'Humidity' },
+  pressurePath:     { type: 'pressure',    label: 'Pressure' },
+  timeRemainingPath: { type: 'time_remaining', label: 'Time Rem.' },
+  signalkPath:      { type: 'value',       label: 'Value' },
+};
+
+function monitorCard(item, isGrid) {
+  // Collect all configured paths for this item
+  const readings = [];
+  Object.entries(PATH_KEY_META).forEach(([key, meta]) => {
+    const path = item[key];
+    if (!path) return;
+    if (key === 'signalkPath' && Object.keys(PATH_KEY_META).some(k => k !== 'signalkPath' && item[k])) return;
+    const unitKey = 'unit_' + key;
+    const unit = item[unitKey] || item.unit || '';
+    const type = meta.type;
+    const raw = appState.monitorValues[path];
+    const display = raw !== undefined ? convertValue(raw, type, unit) : '—';
+    readings.push({ label: meta.label, display, unit, path, type });
+  });
+
+  const tankReading = readings.find(r => r.type === 'volume' || r.type === 'tank');
+  const tankVal = tankReading ? appState.monitorValues[tankReading.path] : undefined;
+  const pct = tankVal !== undefined ? Math.round(tankVal * 100) : null;
+  const barClass = pct !== null ? (pct < 15 ? 'danger' : pct < 25 ? 'warn' : '') : '';
+
+  const trendBtn = (skPath) => item.trending
+    ? `<button class="trend-btn" data-path="${skPath}" data-label="${item.label || 'Trend'}" title="View trend">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </button>` : '';
+
+  if (!isGrid && readings.length > 0) {
+    // List mode — equal columns with vertical separators
+    const cols = readings.map(r => `
+      <div class="mon-reading-col" data-path="${r.path}" data-type="${r.type}" data-unit="${r.unit}">
+        <div class="mon-col-label">${r.label} ${trendBtn(r.path)}</div>
+        <div><span class="mon-col-val mon-reading-val">${r.display}</span><span class="mon-col-unit">${r.type === 'time_remaining' ? '' : r.unit}</span></div>
+      </div>`).join('');
+    return `
+    <div class="monitor-card ${barClass}" data-item-label="${item.label||''}">
+      <div class="monitor-label" style="padding:8px 16px 4px">${item.label || 'Unlabelled'}</div>
+      <div class="mon-readings-row">${cols}</div>
+      ${pct !== null ? `<div class="tank-bar-wrap" style="margin:0"><div class="tank-bar ${barClass}" style="width:${pct}%"></div></div>` : ''}
+    </div>`;
+  }
+
+  // Grid mode — stacked rows
+  const readingsHtml = readings.map(r => `
+    <div class="mon-reading-row" data-path="${r.path}" data-type="${r.type}" data-unit="${r.unit}">
+      <span class="mon-reading-label">${r.label} ${trendBtn(r.path)}</span>
+      <span class="mon-reading-val">${r.display} <span class="monitor-unit">${r.type === 'time_remaining' ? '' : r.unit}</span></span>
+    </div>`).join('');
+
+  return `
+  <div class="monitor-card ${barClass}" data-item-label="${item.label||''}">
+    <div class="monitor-label">${item.label || 'Unlabelled'}</div>
+    ${readingsHtml || '<div class="mon-reading-row"><span class="mon-reading-val">No paths configured</span></div>'}
+    ${pct !== null ? `<div class="tank-bar-wrap"><div class="tank-bar ${barClass}" style="width:${pct}%"></div></div>` : ''}
+  </div>`;
+}
+
+function updateMonitorCards() {
+  // Update both grid rows (.mon-reading-row) and list columns (.mon-reading-col)
+  document.querySelectorAll('.mon-reading-row, .mon-reading-col').forEach(el => {
+    const path = el.dataset.path;
+    const type = el.dataset.type;
+    const unit = el.dataset.unit;
+    if (!path) return;
+    const raw = appState.monitorValues[path];
+    const valEl = el.querySelector('.mon-reading-val, .mon-col-val');
+    if (valEl) {
+      const display = raw !== undefined ? convertValue(raw, type, unit) : '—';
+      if (el.classList.contains('mon-reading-row')) {
+        valEl.innerHTML = `${display} <span class="monitor-unit">${unit}</span>`;
+      } else {
+        valEl.textContent = display;
+      }
+    }
+  });
+  // Update tank bars
+  document.querySelectorAll('.monitor-card').forEach(card => {
+    const tankEl = card.querySelector('.mon-reading-row[data-type="volume"], .mon-reading-row[data-type="tank"], .mon-reading-col[data-type="volume"], .mon-reading-col[data-type="tank"]');
+    if (!tankEl) return;
+    const raw = appState.monitorValues[tankEl.dataset.path];
+    if (raw === undefined) return;
+    const pct = Math.round(raw * 100);
+    const bar = card.querySelector('.tank-bar');
+    if (bar) bar.style.width = pct + '%';
+  });
+}
+
+function formatMonitorValue(val, item) {
+  if (val === null || val === undefined) return '—';
+  return convertValue(val, item.type || 'value', item.unit);
+}
+
+// ── Config panel ───────────────────────────────────────────────────────────
+function renderConfig() {
+  const el = document.getElementById('configContent');
+  const switches = appState.config.switches || [];
+  const monitorItems = appState.config.monitorItems || [];
+
+  let html = `<div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">Switch Circuits</div>`;
+  html += `<div id="switchList">`;
+  switches.forEach((sw, i) => { html += switchCard(sw, i, switches); });
+  html += `</div>`;
+  html += `<button class="btn-add" id="btnAddSwitch">+ Add Circuit</button>`;
+
+  html += `<div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin:24px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border)">Monitor Items</div>`;
+  html += `<div id="monitorList">`;
+  monitorItems.forEach((item, i) => { html += monitorItemCard(item, i); });
+  html += `</div>`;
+  html += `<button class="btn-add" id="btnAddMonitor">+ Add Monitor Item</button>`;
+
+  html += `<div class="config-actions">
+    <button class="btn btn-ghost" id="btnDiscard">Discard</button>
+    <button class="btn btn-primary" id="btnSave">Save Changes</button>
+  </div>`;
+
+  el.innerHTML = html;
+  document.getElementById('btnAddSwitch').addEventListener('click', addSwitch);
+  document.getElementById('btnAddMonitor').addEventListener('click', addMonitorItem);
+  document.getElementById('btnSave').addEventListener('click', saveConfig);
+  document.getElementById('btnDiscard').addEventListener('click', () => { init(); showToast('Changes discarded'); });
+  bindConfigEvents();
+}
+
+function switchCard(sw, index, allSwitches) {
+  const usedCh     = new Map();
+  allSwitches.forEach((s,i) => { if(i!==index) usedCh.set(`${s.czoneInstance}:${s.czoneChannel}`,true); });
+
+  const useVictron   = sw.useVictron || false;
+  const instance     = sw.czoneInstance !== undefined ? sw.czoneInstance : 0;
+  const channel      = sw.czoneChannel || 1;
+  const autoBankPath = `electrical.switches.bank.${instance}.${channel}.state`;
+
+  const victronPaths = (appState.availablePaths.victron || []);
+  const victronOpts  = victronPaths.map(p => {
+    const lbl = p.path.replace('electrical.switches.','').replace('.state','');
+    return `<option value="${p.path}" ${p.path===sw.signalkPath?'selected':''}>${lbl}</option>`;
+  }).join('');
+  const customVictronOpt = (useVictron && sw.signalkPath && !victronPaths.find(p=>p.path===sw.signalkPath))
+    ? `<option value="${sw.signalkPath}" selected>${sw.signalkPath}</option>` : '';
+
+  let chBtns = '';
+  for (let ch=1; ch<=28; ch++) {
+    const used = usedCh.has(`${instance}:${ch}`);
+    const sel  = ch===channel;
+    chBtns += `<div class="channel-btn ${used?'used':sel?'selected':''}" data-ch="${ch}">${ch}</div>`;
+  }
+
+  const iconId  = sw.icon || 'switch';
+  const iconSvg = getIconSVG(iconId, 20);
+
+  const circuitType = sw.circuitType || 'standard';
+  const circuitGroup = sw.circuitGroup || 'Ungrouped';
+  const groups = getCircuitGroups();
+  const groupOpts = groups.map(g => `<option value="${g}" ${g === circuitGroup ? 'selected' : ''}>${g}</option>`).join('');
+
+  const isMode = circuitType === 'mode';
+
+  return `
+  <div class="config-card" data-index="${index}">
+    <div class="config-card-header">
+      <span class="config-card-num">Circuit ${index+1}</span>
+      <button class="btn btn-danger btn-remove-switch" data-index="${index}">Remove</button>
+    </div>
+    <div class="config-card-body">
+      <div class="field-group">
+        <label class="field-label">Circuit Name</label>
+        <input class="field-input cfg-name" type="text" placeholder="e.g. Anchor Light" value="${sw.name||''}">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Circuit Type</label>
+        <select class="field-select cfg-circuit-type" data-index="${index}">
+          <option value="standard" ${circuitType === 'standard' ? 'selected' : ''}>Standard Circuit</option>
+          <option value="mode" ${circuitType === 'mode' ? 'selected' : ''}>Mode</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Circuit Group</label>
+        <select class="field-select cfg-group" ${isMode ? 'disabled' : ''}>${isMode ? '<option value="Mode" selected>Mode</option>' : groupOpts}</select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Icon</label>
+        <button class="icon-picker-btn cfg-icon-btn" data-icon="${iconId}">
+          <span class="cfg-icon-preview">${iconSvg}</span>
+          <span class="cfg-icon-label">${iconId}</span>
+        </button>
+        <input type="hidden" class="cfg-icon" value="${iconId}">
+      </div>
+      <div class="field-group">
+        <label class="field-label">CZone Switchbank Instance</label>
+        <input class="field-input cfg-instance" type="number" min="0" max="255" value="${instance}" data-index="${index}">
+      </div>
+      <div class="field-group full-width">
+        <label class="field-label">CZone Channel — tap to select</label>
+        <input type="hidden" class="cfg-channel" value="${channel}">
+        <div class="channel-grid" data-index="${index}">${chBtns}</div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Switch Type</label>
+        <select class="field-select cfg-switch-type" data-index="${index}" ${isMode ? 'disabled' : ''}>
+          <option value="latching"   ${(!sw.switchType||sw.switchType==='latching'||isMode)?'selected':''}>Latching</option>
+          ${isMode ? '' : `<option value="toggle"    ${sw.switchType==='toggle'?'selected':''}>Toggle</option>
+          <option value="momentary" ${sw.switchType==='momentary'?'selected':''}>Momentary</option>
+          <option value="sequential" ${sw.switchType==='sequential'?'selected':''}>Sequential</option>`}
+        </select>
+        ${isMode ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Modes are always latching (ON only)</div>' : ''}
+      </div>
+      <div class="field-group" ${isMode ? 'style="display:none"' : ''}>
+        <label class="field-label">Labels</label>
+        <select class="field-select cfg-label-preset" data-index="${index}">
+          <option value="on_off"       ${(!sw.labelPreset||sw.labelPreset==='on_off')?'selected':''}>ON / OFF</option>
+          <option value="open_close"   ${sw.labelPreset==='open_close'?'selected':''}>OPEN / CLOSE</option>
+          <option value="up_down"      ${sw.labelPreset==='up_down'?'selected':''}>UP / DOWN</option>
+          <option value="auto_manual"  ${sw.labelPreset==='auto_manual'?'selected':''}>AUTO / MANUAL</option>
+          <option value="start_stop"   ${sw.labelPreset==='start_stop'?'selected':''}>START / STOP</option>
+          <option value="fwd_rev"      ${sw.labelPreset==='fwd_rev'?'selected':''}>FWD / REV</option>
+          <option value="in_out"       ${sw.labelPreset==='in_out'?'selected':''}>IN / OUT</option>
+          <option value="dim_up"       ${sw.labelPreset==='dim_up'?'selected':''}>DIM UP</option>
+          <option value="dim_down"     ${sw.labelPreset==='dim_down'?'selected':''}>DIM DOWN</option>
+          <option value="dim"          ${sw.labelPreset==='dim'?'selected':''}>DIM</option>
+          <option value="fwd"          ${sw.labelPreset==='fwd'?'selected':''}>FWD</option>
+          <option value="rev"          ${sw.labelPreset==='rev'?'selected':''}>REV</option>
+          <option value="custom"       ${sw.labelPreset==='custom'?'selected':''}>Custom…</option>
+        </select>
+        <div class="cfg-custom-labels" style="display:${sw.labelPreset==='custom'?'grid':'none'};grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          <input class="field-input cfg-label-on"  type="text" placeholder="ON label"  value="${sw.labelOn||'ON'}">
+          <input class="field-input cfg-label-off" type="text" placeholder="OFF label" value="${sw.labelOff||'OFF'}">
+        </div>
+      </div>
+      <div class="field-group full-width">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div>
+            <div class="field-label">Victron / Node-RED Control</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:3px">Enable for Victron touchscreen &amp; VRM control via Node-RED virtual switch</div>
+          </div>
+          <div class="pill-toggle cfg-victron-toggle ${useVictron?'on':''}" data-index="${index}" style="flex-shrink:0;margin-left:16px"></div>
+        </div>
+        <input type="hidden" class="cfg-use-victron" value="${useVictron?'1':'0'}">
+        <div class="cfg-sk-path-row">
+          ${useVictron ? `
+          <select class="field-select cfg-path">
+            <option value="">— Select a Node-RED virtual switch —</option>
+            ${customVictronOpt}${victronOpts}
+          </select>` : `
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--text-muted);font-family:monospace;word-break:break-all">
+            ${autoBankPath}
+          </div>
+          <input type="hidden" class="cfg-path" value="${autoBankPath}">`}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+
+function monitorItemCard(item, index) {
+  // Backwards compat — old saved configs may use plural forms
+  const catAlias = { 'Batteries':'Battery', 'Tanks':'Tank', 'Temperatures':'Temperature' };
+  const cat = catAlias[item.category] || item.category || 'Battery';
+
+  // Category definitions — what sub-fields to show and their defaults
+  const CATEGORY_FIELDS = {
+    'Battery': [
+      { key: 'voltage',       label: 'Voltage',         type: 'voltage',        unit: 'V',  pathKey: 'voltagePath' },
+      { key: 'current',       label: 'Current',         type: 'current',        unit: 'A',  pathKey: 'currentPath' },
+      { key: 'soc',           label: 'State of Charge', type: 'percent',        unit: '%',  pathKey: 'socPath' },
+      { key: 'timeRemaining', label: 'Time Remaining',  type: 'time_remaining', unit: 'time', pathKey: 'timeRemainingPath' },
+      { key: 'temperature',   label: 'Temperature',     type: 'temperature',    unit: '°C', pathKey: 'tempPath' },
+    ],
+    'Tank': [
+      { key: 'level', label: 'Level', type: 'volume', unit: '%', pathKey: 'levelPath' },
+    ],
+    'Temperature': [
+      { key: 'temperature', label: 'Temperature', type: 'temperature', unit: '°C', pathKey: 'tempPath' },
+    ],
+    'Engine': [
+      { key: 'oilTemp',          label: 'Oil Temp',          type: 'temperature', unit: '°C', pathKey: 'oilTempPath' },
+      { key: 'coolant',          label: 'Coolant Temp',      type: 'temperature', unit: '°C', pathKey: 'coolantPath' },
+      { key: 'oilPressure',      label: 'Oil Pressure',      type: 'pressure',    unit: 'kPa', pathKey: 'oilPressPath' },
+      { key: 'rpm',              label: 'RPM',               type: 'rpm',         unit: 'RPM', pathKey: 'rpmPath' },
+      { key: 'gearboxOilTemp',   label: 'Gearbox Oil Temp',  type: 'temperature', unit: '°C', pathKey: 'gearboxTempPath' },
+      { key: 'gearboxOilPres',   label: 'Gearbox Oil Press', type: 'pressure',    unit: 'kPa', pathKey: 'gearboxPressPath' },
+    ],
+    'Solar': [
+      { key: 'voltage', label: 'Voltage', type: 'voltage', unit: 'V', pathKey: 'voltagePath' },
+      { key: 'current', label: 'Current', type: 'current', unit: 'A', pathKey: 'currentPath' },
+      { key: 'power',   label: 'Power',   type: 'power',   unit: 'W', pathKey: 'powerPath' },
+    ],
+    'Alternator': [
+      { key: 'voltage',     label: 'Voltage',     type: 'voltage',     unit: 'V',  pathKey: 'voltagePath' },
+      { key: 'current',     label: 'Current',     type: 'current',     unit: 'A',  pathKey: 'currentPath' },
+      { key: 'power',       label: 'Power',        type: 'power',       unit: 'W',  pathKey: 'powerPath' },
+      { key: 'temperature', label: 'Temperature', type: 'temperature', unit: '°C', pathKey: 'tempPath' },
+    ],
+    'AC / Inverter': [
+      { key: 'voltage',   label: 'Voltage',   type: 'voltage',   unit: 'V',  pathKey: 'voltagePath' },
+      { key: 'current',   label: 'Current',   type: 'current',   unit: 'A',  pathKey: 'currentPath' },
+      { key: 'power',     label: 'Power',     type: 'power',     unit: 'W',  pathKey: 'powerPath' },
+      { key: 'frequency', label: 'Frequency', type: 'frequency', unit: 'Hz', pathKey: 'freqPath' },
+    ],
+    'Speed': [
+      { key: 'speed', label: 'Speed', type: 'speed', unit: 'kn', pathKey: 'speedPath' },
+    ],
+    'Pressure': [
+      { key: 'pressure', label: 'Pressure', type: 'pressure', unit: 'kPa', pathKey: 'pressurePath' },
+    ],
+    'Atm. Pressure': [
+      { key: 'pressure', label: 'Atm. Pressure', type: 'atm_pressure', unit: 'mBar', pathKey: 'pressurePath' },
+    ],
+    'Humidity': [
+      { key: 'humidity', label: 'Humidity', type: 'humidity', unit: '%Rh', pathKey: 'humidityPath' },
+    ],
+    'Other': [
+      { key: 'value', label: 'Value', type: 'value', unit: '', pathKey: 'signalkPath' },
+    ],
+  };
+
+  const fields = CATEGORY_FIELDS[cat] || CATEGORY_FIELDS['Other'];
+
+  // Build path options from discovered paths — filter by CATEGORY first, then by type
+  const discovered = appState.discoveredPaths || {};
+
+  // Map categories to their primary path source
+  const categoryPool = {
+    'Battery':       () => (discovered.batteries || []),
+    'Tank':          () => (discovered.tanks || []),
+    'Temperature':   () => [...(discovered.temperatures || []), ...(discovered.batteries || []).filter(p => p.type === 'temperature'), ...(discovered.alternators || []).filter(p => p.type === 'temperature'), ...(discovered.solar || []).filter(p => p.type === 'temperature')],
+    'Solar':         () => (discovered.solar || []),
+    'Alternator':    () => (discovered.alternators || []),
+    'Engine':        () => [...(discovered.other || []), ...(discovered.temperatures || [])],
+    'AC / Inverter': () => (discovered.inverters || []),
+    'Speed':         () => (discovered.other || []),
+    'Pressure':      () => (discovered.other || []),
+    'Atm. Pressure': () => (discovered.other || []),
+    'Humidity':      () => (discovered.other || []),
+    'Other':         () => [...(discovered.batteries || []), ...(discovered.solar || []), ...(discovered.inverters || []), ...(discovered.alternators || []), ...(discovered.tanks || []), ...(discovered.temperatures || []), ...(discovered.other || [])],
+  };
+
+  const getPathOpts = (type, pathKey) => {
+    const poolFn = categoryPool[cat] || categoryPool['Other'];
+    let pool = poolFn().filter(p => p.type === type);
+    // For temperature fields in non-temperature categories, also include general temps
+    if (type === 'temperature' && cat !== 'Temperature') {
+      const extra = (discovered.temperatures || []).filter(p => !pool.find(x => x.path === p.path));
+      pool = [...pool, ...extra];
+    }
+    const currentVal = pathKey ? (item[pathKey] || '') : (item.signalkPath || '');
+    if (!pool.length) return '';
+    return pool.map(p => `<option value="${p.path}" ${p.path===currentVal?'selected':''}>${p.label}</option>`).join('');
+  };
+
+  const catOpts = ['AC / Inverter','Alternator','Atm. Pressure','Battery','Engine','Humidity','Pressure','Solar','Speed','Tank','Temperature','Other'].map(c =>
+    `<option value="${c}" ${c===cat?'selected':''}>${c}</option>`
+  ).join('');
+
+  let fieldRows = fields.map(field => {
+    const currentPath = item[field.pathKey] || (field.pathKey === 'signalkPath' ? item.signalkPath : '');
+    const opts = getPathOpts(field.type, field.pathKey);
+    const hasOpts = opts.length > 0;
+    return `
+    <div class="field-group full-width mon-field-row" style="display:grid;grid-template-columns:1fr 90px;gap:8px;align-items:end">
+      <div>
+        <div class="field-label" style="margin-bottom:6px">${field.label} — Signal K Path</div>
+        ${hasOpts ? `
+        <select class="field-select mon-path-field" data-path-key="${field.pathKey}" data-type="${field.type}">
+          <option value="">— select —</option>
+          ${opts}
+        </select>` : `
+        <input class="field-input mon-path-field" type="text" data-path-key="${field.pathKey}" data-type="${field.type}"
+          placeholder="e.g. electrical.batteries.house.${field.key}" value="${currentPath}">`}
+      </div>
+      <div>
+        <div class="field-label" style="margin-bottom:6px">Unit</div>
+        ${unitSelectHTML(field.type, item['unit_' + field.pathKey] || field.unit, field.pathKey)}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="config-card monitor-item-card" data-index="${index}">
+    <div class="config-card-header">
+      <span class="config-card-num">Monitor Item ${index+1}</span>
+      <button class="btn btn-danger btn-remove-monitor" data-index="${index}">Remove</button>
+    </div>
+    <div class="config-card-body">
+      <div class="field-group">
+        <label class="field-label">Label</label>
+        <input class="field-input mon-label" type="text" placeholder="e.g. House Battery" value="${item.label||''}">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Category</label>
+        <select class="field-select mon-category" data-index="${index}">${catOpts}</select>
+      </div>
+      <div class="field-group">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div class="field-label">Trend Data</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:3px">Record values to SD card for 31-day trending</div>
+          </div>
+          <div class="pill-toggle mon-trending-toggle ${item.trending?'on':''}" data-index="${index}" style="flex-shrink:0;margin-left:16px"></div>
+        </div>
+        <input type="hidden" class="mon-trending" value="${item.trending?'1':'0'}">
+      </div>
+      <div class="mon-fields-container full-width" style="grid-column:1/-1">
+        ${fieldRows}
+      </div>
+    </div>
+  </div>`;
+}
+
+
+function bindConfigEvents() {
+  document.querySelectorAll('.btn-remove-switch').forEach(btn => {
+    btn.addEventListener('click', () => { appState.config.switches.splice(parseInt(btn.dataset.index),1); renderConfig(); });
+  });
+  document.querySelectorAll('.btn-remove-monitor').forEach(btn => {
+    btn.addEventListener('click', () => { appState.config.monitorItems.splice(parseInt(btn.dataset.index),1); renderConfig(); });
+  });
+  const gpsToggle = document.getElementById('toggle-show-position');
+  if (gpsToggle) gpsToggle.addEventListener('click', () => {
+    appState.config.showPosition = !appState.config.showPosition;
+    gpsToggle.classList.toggle('on', appState.config.showPosition);
+  });
+  // Show/hide custom label inputs when switch label preset changes
+  document.querySelectorAll('.cfg-label-preset').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const custom = sel.closest('.config-card').querySelector('.cfg-custom-labels');
+      if (custom) custom.style.display = sel.value === 'custom' ? 'grid' : 'none';
+    });
+  });
+  // When circuit type changes, re-render card with forced mode settings
+  document.querySelectorAll('.cfg-circuit-type').forEach(sel => {
+    sel.addEventListener('change', () => {
+      // Save all current form state before re-rendering
+      appState.config.switches = getFormSwitches();
+      const idx = parseInt(sel.dataset.index);
+      const sw = appState.config.switches[idx];
+      if (sel.value === 'mode') {
+        sw.circuitType = 'mode';
+        sw.circuitGroup = 'Mode';
+        sw.switchType = 'latching';
+        sw.labelPreset = 'custom';
+        sw.labelOn = 'ON';
+        sw.labelOff = '';
+      } else {
+        sw.circuitType = 'standard';
+        if (sw.circuitGroup === 'Mode') sw.circuitGroup = 'Ungrouped';
+      }
+      renderConfig();
+    });
+  });
+  // Rebuild monitor fields when category changes
+  document.querySelectorAll('.mon-category').forEach(sel => {
+    sel.addEventListener('change', () => {
+      appState.config.monitorItems = getFormMonitorItems();
+      const idx = parseInt(sel.dataset.index);
+      appState.config.monitorItems[idx].category = sel.value;
+      renderConfig();
+    });
+  });
+  // Trending toggle
+  document.querySelectorAll('.mon-trending-toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      toggle.classList.toggle('on');
+      const card = toggle.closest('.monitor-item-card');
+      card.querySelector('.mon-trending').value = toggle.classList.contains('on') ? '1' : '0';
+    });
+  });
+  document.querySelectorAll('.channel-grid').forEach(grid => {
+    grid.querySelectorAll('.channel-btn:not(.used)').forEach(btn => {
+      btn.addEventListener('click', () => {
+        grid.querySelectorAll('.channel-btn').forEach(b=>b.classList.remove('selected'));
+        btn.classList.add('selected');
+        grid.closest('.config-card').querySelector('.cfg-channel').value = btn.dataset.ch;
+        refreshChannelGrids();
+      });
+    });
+  });
+  // Victron toggle
+  document.querySelectorAll('.cfg-victron-toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const card       = toggle.closest('.config-card');
+      const useVictron = card.querySelector('.cfg-use-victron');
+      const isOn       = toggle.classList.toggle('on');
+      useVictron.value = isOn ? '1' : '0';
+
+      // Rebuild the SK path row
+      const instance = parseInt(card.querySelector('.cfg-instance').value)||0;
+      const channel  = parseInt(card.querySelector('.cfg-channel').value)||1;
+      const pathRow  = card.querySelector('.cfg-sk-path-row');
+      const autoBankPath = `electrical.switches.bank.${instance}.${channel}.state`;
+
+      if (isOn) {
+        const victronPaths = (appState.availablePaths.victron || []);
+        const opts = victronPaths.map(p => {
+          const lbl = p.path.replace('electrical.switches.','').replace('.state','');
+          return `<option value="${p.path}">${lbl}</option>`;
+        }).join('');
+        pathRow.innerHTML = `<select class="field-select cfg-path">
+          <option value="">— Select a Node-RED virtual switch —</option>${opts}
+        </select>`;
+      } else {
+        pathRow.innerHTML = `
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--text-muted);font-family:monospace;word-break:break-all">
+            ${autoBankPath}
+          </div>
+          <input type="hidden" class="cfg-path" value="${autoBankPath}">`;
+      }
+    });
+  });
+
+  // When instance or channel changes, update the auto bank path display
+  document.querySelectorAll('.cfg-instance').forEach(inp => {
+    inp.addEventListener('input', updateBankPath);
+  });
+  document.querySelectorAll('.icon-picker-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openIconPicker(btn.dataset.icon, (selectedId) => {
+        btn.dataset.icon = selectedId;
+        btn.querySelector('.cfg-icon-preview').innerHTML = getIconSVG(selectedId, 20);
+        btn.querySelector('.cfg-icon-label').textContent = selectedId;
+        btn.closest('.config-card').querySelector('.cfg-icon').value = selectedId;
+      });
+    });
+  });
+}
+
+function updateBankPath(e) {
+  const card    = e.target.closest('.config-card');
+  if (!card) return;
+  const useV    = card.querySelector('.cfg-use-victron').value === '1';
+  if (useV) return; // don't overwrite if using Victron
+  const instance = parseInt(card.querySelector('.cfg-instance').value)||0;
+  const channel  = parseInt(card.querySelector('.cfg-channel').value)||1;
+  const autoBankPath = `electrical.switches.bank.${instance}.${channel}.state`;
+  const pathInput = card.querySelector('.cfg-path');
+  if (pathInput && pathInput.type === 'hidden') pathInput.value = autoBankPath;
+  const display = card.querySelector('.cfg-sk-path-row div');
+  if (display) display.textContent = autoBankPath;
+}
+
+function refreshChannelGrids() {
+  const switches = getFormSwitches();
+  document.querySelectorAll('.channel-grid').forEach((grid, idx) => {
+    const used = new Map();
+    switches.forEach((sw,i) => { if(i!==idx) used.set(`${sw.czoneInstance}:${sw.czoneChannel}`,true); });
+    const selCh = parseInt(grid.closest('.config-card').querySelector('.cfg-channel').value);
+    const inst  = parseInt(grid.closest('.config-card').querySelector('.cfg-instance').value)||0;
+    grid.querySelectorAll('.channel-btn').forEach(btn => {
+      const ch = parseInt(btn.dataset.ch);
+      btn.classList.remove('used','selected');
+      if(ch===selCh) btn.classList.add('selected');
+      else if(used.has(`${inst}:${ch}`)) btn.classList.add('used');
+    });
+  });
+}
+
+function getFormSwitches() {
+  return Array.from(document.querySelectorAll('.config-card:not(.monitor-item-card)')).map(card => {
+    const useVictron   = card.querySelector('.cfg-use-victron').value === '1';
+    const instance     = parseInt(card.querySelector('.cfg-instance').value)||0;
+    const channel      = parseInt(card.querySelector('.cfg-channel').value)||1;
+    const pathEl       = card.querySelector('.cfg-path');
+    const autoBankPath = `electrical.switches.bank.${instance}.${channel}.state`;
+    const signalkPath  = useVictron ? (pathEl ? pathEl.value : '') : autoBankPath;
+    const circuitType = card.querySelector('.cfg-circuit-type').value;
+    const isMode = circuitType === 'mode';
+    const labelPreset  = isMode ? 'custom' : card.querySelector('.cfg-label-preset').value;
+    return {
+      name:          card.querySelector('.cfg-name').value.trim(),
+      icon:          card.querySelector('.cfg-icon').value,
+      circuitType,
+      circuitGroup:  isMode ? 'Mode' : card.querySelector('.cfg-group').value,
+      switchType:    isMode ? 'latching' : card.querySelector('.cfg-switch-type').value,
+      labelPreset,
+      labelOn:       isMode ? 'ON' : (labelPreset === 'custom' ? card.querySelector('.cfg-label-on').value.trim() : undefined),
+      labelOff:      isMode ? '' : (labelPreset === 'custom' ? card.querySelector('.cfg-label-off').value.trim() : undefined),
+      useVictron,
+      signalkPath,
+      czoneInstance: instance,
+      czoneChannel:  channel
+    };
+  });
+}
+
+function getFormMonitorItems() {
+  return Array.from(document.querySelectorAll('.monitor-item-card')).map(card => {
+    const item = {
+      label:    card.querySelector('.mon-label').value.trim(),
+      category: card.querySelector('.mon-category').value,
+      trending: card.querySelector('.mon-trending').value === '1',
+    };
+    // Collect all path fields
+    card.querySelectorAll('.mon-path-field').forEach(f => {
+      const val = f.value.trim();
+      if (val) item[f.dataset.pathKey] = val;
+    });
+    // Collect all unit fields — store as unit_<pathKey>
+    card.querySelectorAll('.mon-unit-field').forEach(f => {
+      item['unit_' + f.dataset.pathKey] = f.value;
+    });
+    // First non-empty path becomes signalkPath for backwards compat
+    // Also store the primary unit as item.unit for the monitor display
+    const firstPath = card.querySelector('.mon-path-field');
+    const firstUnit = card.querySelector('.mon-unit-field');
+    if (firstPath) item.signalkPath = firstPath.value.trim();
+    if (firstUnit) item.unit = firstUnit.value;
+    return item;
+  });
+}
+
+function addSwitch() {
+  appState.config.switches = getFormSwitches();
+  appState.config.switches.push({ name:'', icon:'switch', circuitType:'standard', circuitGroup:'Ungrouped', signalkPath:'', czoneInstance:0, czoneChannel:1 });
+  renderConfig();
+  document.querySelectorAll('.config-card:not(.monitor-item-card)').forEach((c,i,a)=>{ if(i===a.length-1) c.scrollIntoView({behavior:'smooth',block:'start'}); });
+}
+
+function addMonitorItem() {
+  if (!appState.config.monitorItems) appState.config.monitorItems = [];
+  appState.config.monitorItems = getFormMonitorItems();
+  appState.config.monitorItems.push({ label:'', category:'Battery', signalkPath:'', type:'voltage', unit:'V' });
+  renderConfig();
+  document.querySelectorAll('.monitor-item-card').forEach((c,i,a)=>{ if(i===a.length-1) c.scrollIntoView({behavior:'smooth',block:'start'}); });
+}
+
+async function saveConfig() {
+  const newSwitches = getFormSwitches();
+  for (const sw of newSwitches) {
+    if (!sw.name)        { showToast('All circuits need a name', 'error'); return; }
+    if (!sw.signalkPath) { showToast('All circuits need a Signal K path', 'error'); return; }
+  }
+  const newConfig = { ...appState.config, switches: newSwitches, monitorItems: getFormMonitorItems(), favouriteTabs: appState.config.favouriteTabs || [] };
+  try {
+    await api('POST', 'api/config', newConfig);
+    appState.config = newConfig;
+    showToast('Saved successfully', 'success');
+    renderControl();
+    renderMonitor();
+    renderModes();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+// ── Icon picker ────────────────────────────────────────────────────────────
+// ── Trend chart ───────────────────────────────────────────────────────────
+let trendState = { path: '', label: '', range: '1h', data: [] };
+
+function openTrendModal(skPath, label) {
+  trendState.path = skPath;
+  trendState.label = label;
+  trendState.range = '1h';
+  document.getElementById('trendModalTitle').textContent = label || 'Trend';
+  document.querySelectorAll('.trend-range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === '1h'));
+  document.getElementById('trendModal').classList.remove('hidden');
+  fetchTrendData();
+}
+
+function closeTrendModal() {
+  document.getElementById('trendModal').classList.add('hidden');
+  trendState.data = [];
+}
+
+async function fetchTrendData() {
+  const loading = document.getElementById('trendLoading');
+  const empty = document.getElementById('trendEmpty');
+  const chartWrap = document.querySelector('.trend-chart-wrap');
+  const stats = document.getElementById('trendStats');
+
+  loading.classList.remove('hidden');
+  empty.classList.add('hidden');
+  chartWrap.style.display = 'none';
+  stats.innerHTML = '';
+
+  try {
+    const resp = await api('GET', `api/trend?path=${encodeURIComponent(trendState.path)}&range=${trendState.range}`);
+    loading.classList.add('hidden');
+
+    if (!resp.available) {
+      empty.textContent = 'No SD card detected. Insert an SD card to enable trending.';
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    if (!resp.data || resp.data.length === 0) {
+      empty.textContent = 'No trend data available yet. Data is recorded every 30 seconds when trending is enabled.';
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    trendState.data = resp.data;
+    chartWrap.style.display = 'block';
+    drawTrendChart();
+    drawTrendStats();
+  } catch (e) {
+    loading.classList.add('hidden');
+    empty.textContent = 'Error loading trend data: ' + e.message;
+    empty.classList.remove('hidden');
+  }
+}
+
+function drawTrendStats() {
+  const data = trendState.data;
+  if (!data.length) return;
+  const values = data.map(d => d[1]);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const avg = values.reduce((s, v) => s + v, 0) / values.length;
+  const current = values[values.length - 1];
+
+  const fmt = v => {
+    if (Math.abs(v) >= 1000) return v.toFixed(0);
+    if (Math.abs(v) >= 100) return v.toFixed(1);
+    if (Math.abs(v) >= 1) return v.toFixed(2);
+    return v.toFixed(3);
+  };
+
+  document.getElementById('trendStats').innerHTML = `
+    <span><span class="trend-stat-dot" style="background:var(--accent)"></span> Current: ${fmt(current)}</span>
+    <span><span class="trend-stat-dot" style="background:var(--on)"></span> Avg: ${fmt(avg)}</span>
+    <span><span class="trend-stat-dot" style="background:#44bbee"></span> Min: ${fmt(min)}</span>
+    <span><span class="trend-stat-dot" style="background:var(--danger)"></span> Max: ${fmt(max)}</span>`;
+}
+
+function drawTrendChart() {
+  const canvas = document.getElementById('trendCanvas');
+  const ctx = canvas.getContext('2d');
+  const data = trendState.data;
+
+  // High-DPI canvas
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = rect.width - 24; // padding
+  const h = 250;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr);
+
+  if (data.length < 2) return;
+
+  const t = appState.theme;
+  const pad = { top: 12, right: 12, bottom: 36, left: 52 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  // Calculate ranges
+  const times = data.map(d => d[0]);
+  const values = data.map(d => d[1]);
+  const tMin = Math.min(...times);
+  const tMax = Math.max(...times);
+  let vMin = Math.min(...values);
+  let vMax = Math.max(...values);
+  if (vMin === vMax) { vMin -= 1; vMax += 1; }
+  const vPad = (vMax - vMin) * 0.08;
+  vMin -= vPad;
+  vMax += vPad;
+
+  // Clear
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid lines
+  ctx.strokeStyle = t.border || '#2a3548';
+  ctx.lineWidth = 0.5;
+  const yTicks = 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const y = pad.top + ch - (i / yTicks) * ch;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+  }
+
+  // Y-axis labels
+  ctx.fillStyle = t.textDim || '#7a88aa';
+  ctx.font = '10px system-ui, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= yTicks; i++) {
+    const val = vMin + (i / yTicks) * (vMax - vMin);
+    const y = pad.top + ch - (i / yTicks) * ch;
+    const label = Math.abs(val) >= 100 ? val.toFixed(0) : Math.abs(val) >= 1 ? val.toFixed(1) : val.toFixed(2);
+    ctx.fillText(label, pad.left - 6, y);
+  }
+
+  // X-axis labels
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const xTicks = Math.min(6, data.length);
+  for (let i = 0; i < xTicks; i++) {
+    const idx = Math.floor(i * (data.length - 1) / (xTicks - 1));
+    const x = pad.left + (idx / (data.length - 1)) * cw;
+    const d = new Date(data[idx][0]);
+    let label;
+    if (trendState.range === '1h' || trendState.range === '24h') {
+      label = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+    } else {
+      label = (d.getMonth()+1) + '/' + d.getDate();
+    }
+    ctx.fillText(label, x, pad.top + ch + 8);
+  }
+
+  // Line path
+  const toX = i => pad.left + ((data[i][0] - tMin) / (tMax - tMin)) * cw;
+  const toY = i => pad.top + ch - ((data[i][1] - vMin) / (vMax - vMin)) * ch;
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+  const accentRGB = hexToRGB(t.accent || '#7c9cff');
+  grad.addColorStop(0, `rgba(${accentRGB},0.25)`);
+  grad.addColorStop(1, `rgba(${accentRGB},0.02)`);
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(0));
+  for (let i = 1; i < data.length; i++) ctx.lineTo(toX(i), toY(i));
+  ctx.lineTo(toX(data.length - 1), pad.top + ch);
+  ctx.lineTo(toX(0), pad.top + ch);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(0));
+  for (let i = 1; i < data.length; i++) ctx.lineTo(toX(i), toY(i));
+  ctx.strokeStyle = t.accent || '#7c9cff';
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+}
+
+function hexToRGB(hex) {
+  const r = parseInt(hex.slice(1,3), 16);
+  const g = parseInt(hex.slice(3,5), 16);
+  const b = parseInt(hex.slice(5,7), 16);
+  return `${r},${g},${b}`;
+}
+
+// Trend modal events
+document.getElementById('trendModalClose').addEventListener('click', closeTrendModal);
+document.getElementById('trendModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('trendModal')) closeTrendModal();
+});
+document.querySelectorAll('.trend-range-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    trendState.range = btn.dataset.range;
+    document.querySelectorAll('.trend-range-btn').forEach(b => b.classList.toggle('active', b === btn));
+    fetchTrendData();
+  });
+});
+
+// Resize chart on window resize
+window.addEventListener('resize', () => {
+  if (!document.getElementById('trendModal').classList.contains('hidden') && trendState.data.length > 0) {
+    drawTrendChart();
+  }
+});
+
+function openIconPicker(currentIcon, callback) {
+  appState.iconPickerCallback = callback;
+  const body = document.getElementById('iconModalBody');
+  let html = '';
+  ICONS.categories.forEach(cat => {
+    html += `<div class="icon-category-label">${cat.label}</div>`;
+    html += `<div class="icon-grid-picker">`;
+    cat.icons.forEach(icon => {
+      html += `<div class="icon-opt ${icon.id===currentIcon?'selected':''}" data-id="${icon.id}" title="${icon.label}">
+        ${getIconSVG(icon.id, 22)}
+        <span class="icon-opt-label">${icon.label}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  body.innerHTML = html;
+  body.querySelectorAll('.icon-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      if (appState.iconPickerCallback) appState.iconPickerCallback(opt.dataset.id);
+      document.getElementById('iconModal').classList.add('hidden');
+    });
+  });
+  document.getElementById('iconModal').classList.remove('hidden');
+}
+
+document.getElementById('iconModalClose').addEventListener('click', () => {
+  document.getElementById('iconModal').classList.add('hidden');
+});
+document.getElementById('iconModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('iconModal')) document.getElementById('iconModal').classList.add('hidden');
+});
+
+// ── Theme panel ────────────────────────────────────────────────────────────
+function renderTheme() {
+  const el = document.getElementById('themeContent');
+  const t  = appState.theme;
+  const colorRows = [
+    { key:'bg',      label:'Background',    desc:'Main background' },
+    { key:'bg2',     label:'Surface',       desc:'Cards and panels' },
+    { key:'bg3',     label:'Raised Surface',desc:'Card headers, inputs' },
+    { key:'border',  label:'Border',        desc:'Dividers and outlines' },
+    { key:'accent',  label:'Accent',        desc:'Highlights and links' },
+    { key:'on',      label:'ON Colour',     desc:'Switch on state' },
+    { key:'off',     label:'OFF Colour',    desc:'Switch off state' },
+    { key:'danger',  label:'Danger',        desc:'Errors and warnings' },
+    { key:'text',    label:'Text',          desc:'Primary text' },
+    { key:'textDim', label:'Dimmed Text',   desc:'Secondary text' },
+  ];
+
+  let html = `<div class="theme-section">Presets</div>`;
+  html += `<div class="preset-grid">`;
+  PRESETS.forEach((p,i) => {
+    html += `<div class="preset-btn" style="background:${p.bg2};color:${p.text};border-color:${p.border}" data-preset="${i}">${p.label}</div>`;
+  });
+  html += `</div>`;
+
+  html += `<div class="theme-section">Colours</div><div class="theme-grid">`;
+  colorRows.forEach(row => {
+    const val = t[row.key]||'#000000';
+    html += `<div class="theme-row">
+      <div><div class="theme-row-label">${row.label}</div><div class="theme-row-desc">${row.desc}</div></div>
+      <div class="color-swatch" style="background:${val}" data-key="${row.key}">
+        <input type="color" value="${val}" data-key="${row.key}">
+      </div></div>`;
+  });
+  html += `</div>`;
+
+  html += `<div class="theme-section">Font</div><div class="font-grid">`;
+  FONTS.forEach(f => {
+    html += `<div class="font-btn ${t.font===f.id?'active':''}" data-font="${f.id}">
+      <div class="font-btn-name">${f.label}</div>
+      <div class="font-btn-preview" style="font-family:${f.stack}">${f.preview}</div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  html += `<div class="theme-section">Display Options</div>`;
+  html += `<div class="toggle-row" id="toggleView">
+    <div><div class="toggle-row-label">Grid View</div><div class="toggle-row-desc">Switch between list and grid layout</div></div>
+    <div class="pill-toggle ${t.viewMode==='grid'?'on':''}" id="viewToggle"></div>
+  </div>`;
+  html += `<div class="toggle-row" id="toggleMeta">
+    <div><div class="toggle-row-label">Show Instance &amp; Channel</div><div class="toggle-row-desc">Display CZone technical details on cards</div></div>
+    <div class="pill-toggle ${t.showMeta?'on':''}" id="metaToggle"></div>
+  </div>`;
+
+  html += `<div class="config-actions" style="margin-top:20px">
+    <button class="btn btn-ghost" id="btnThemeReset">Reset to Default</button>
+    <button class="btn btn-primary" id="btnThemeSave">Apply Theme</button>
+  </div>`;
+
+  el.innerHTML = html;
+
+  el.querySelectorAll('input[type="color"]').forEach(inp => {
+    inp.addEventListener('input', e => {
+      appState.theme[e.target.dataset.key] = e.target.value;
+      e.target.closest('.color-swatch').style.background = e.target.value;
+    });
+  });
+  el.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      Object.assign(appState.theme, PRESETS[parseInt(btn.dataset.preset)]);
+      saveTheme(); renderTheme(); renderControl(); showToast('Theme applied', 'success');
+    });
+  });
+  el.querySelectorAll('.font-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      appState.theme.font = btn.dataset.font;
+      el.querySelectorAll('.font-btn').forEach(b=>b.classList.toggle('active',b.dataset.font===btn.dataset.font));
+    });
+  });
+  document.getElementById('toggleView').addEventListener('click', () => {
+    appState.theme.viewMode = appState.theme.viewMode === 'grid' ? 'list' : 'grid';
+    document.getElementById('viewToggle').classList.toggle('on', appState.theme.viewMode === 'grid');
+  });
+  document.getElementById('toggleMeta').addEventListener('click', () => {
+    appState.theme.showMeta = !appState.theme.showMeta;
+    document.getElementById('metaToggle').classList.toggle('on', appState.theme.showMeta);
+  });
+  document.getElementById('btnThemeSave').addEventListener('click', () => {
+    saveTheme(); renderControl(); showToast('Theme applied', 'success');
+  });
+  document.getElementById('btnThemeReset').addEventListener('click', () => {
+    Object.assign(appState.theme, THEME_DEFAULTS); saveTheme(); renderTheme(); renderControl(); showToast('Theme reset', 'success');
+  });
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+function showToast(msg, type='success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = `toast ${type} show`;
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// Render initial tabs (before API loads) + start app
+renderTabs();
+init();
+</script>
+</body>
+</html>
