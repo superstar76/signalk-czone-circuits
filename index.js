@@ -1154,6 +1154,12 @@ module.exports = function (app) {
       mapping = null
       runtimeState.clear()
       publishedCircuitValues.clear()
+      // [fork] Signal K removes a plugin's PUT handlers when it stops. Forget
+      // which paths were registered, or the next start registers none and a
+      // PUT answers "not supported" until Signal K itself is restarted (every
+      // change in the settings panel restarts the plugin). Same fix as
+      // upstream be38f40.
+      registeredPutPaths.clear()
     },
 
     registerWithRouter: router => {

@@ -157,6 +157,7 @@ Only matters if you start using meters (we use them for monitoring in the fork).
 - **Symptom:** a PUT issued in-process with `app.putSelfPath('electrical.czone.Light_1.switch.state', true)` was accepted but **didn't switch the circuit**. Calling `sendCircuitState()` directly does.
 - **Status:** not fully diagnosed. It may be how Signal K routes a PUT to a handler registered with a source (`PLUGIN_ID`).
 - **Worth testing:** a PUT via REST, `PUT /signalk/v1/api/vessels/self/electrical/czone/Light_1/switch/state` `{"value": true}`, since other apps (KIP, Node-RED) would use that.
+- **Update, 5 October:** Matt found the cause on his Cerbo. Signal K removes a plugin's PUT handlers when the plugin stops, and the plugin kept its own record of the paths as registered, so after a plugin restart (any settings change) it registered none: "PUT not supported" until Signal K itself was restarted. Fixed upstream in `be38f40` and, the same way, in the fork (`registeredPutPaths.clear()` in `stop()`, with a test). This is very likely what we saw on the bench.
 
 ## 9. Smaller points from this week
 

@@ -255,6 +255,7 @@ All under `/plugins/signalk-czone-circuits`.
 | White screen from the plotter's Signal K tile | It opens Signal K's admin page, too modern for the plotter's browser | Our webapp served through `signalk-navico-embedder`; page script kept within that browser's syntax |
 | Could not scroll on the plotter; a drag selected text | The plotter's touch arrives as mouse events | Drag-to-scroll and no text selection in the plotter layout |
 | The GX's Outputs list jumped about every few seconds | The label carried live amps, and every 0.1 A wobble renamed the switch, which makes the GX re-sort and jump to the selected row | Label held steady against small wobbles |
+| A Signal K PUT to a switch path stopped working after any settings change, until Signal K was restarted | Signal K drops a plugin's PUT handlers when the plugin stops; the plugin remembered the paths as registered and registered none on the next start (found by Matt, 5 October) | The record is cleared on stop, so every start registers the handlers again |
 | ON buttons flickered every few seconds (seen on the plotter) | Every list was rebuilt whole on each live update, and the amps under ON change constantly | Lists are updated in place: a changed reading changes one piece of text |
 
 ## 8. Files
@@ -296,7 +297,7 @@ Changes to Matt's files:
 
 ## 9. Tests
 
-`npm test` runs Matt's suite and the fork's, 24 files, all passing. The fork's tests use frames captured on the bench and on Compass Rose, and eight sample ZCFs (two bench, two Compass Rose, Meitaki, Persevere, Sel Citron, SugarShack).
+`npm test` runs Matt's suite and the fork's, 25 files, all passing. The fork's tests use frames captured on the bench and on Compass Rose, and eight sample ZCFs (two bench, two Compass Rose, Meitaki, Persevere, Sel Citron, SugarShack).
 
 The webapp pages are not covered by `npm test`. They were checked by hand in a current Chromium and, for the chartplotter layout, in Chromium 69.0.3494, the version the plotter runs: layout, drag scrolling of the list and of the left column, a drag from a button not switching it, a tap switching it, the desktop page unchanged, and the confirm-before-off question (asked, kept on, turned off, and a page that did not know the circuit was nominated). The settings panel's new section was rendered and exercised in a current Chromium.
 
