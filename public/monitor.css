@@ -55,6 +55,7 @@
 .mon-value small { font-weight:500; font-size:11px; color:var(--muted); }
 .mon-value.clickable { cursor:pointer; }
 .mon-value.clickable:hover { border-color:color-mix(in srgb, var(--cat) 55%, transparent); }
+.mon-value.is-on { border-color:#2bd48f; background:#14402f; color:#eafff5; }
 .mon-value.active { border-color:var(--cat); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--cat) 40%, transparent); }
 .mon-level { display:block; width:100%; height:4px; border-radius:2px; background:#0c2135; overflow:hidden; }
 .mon-level span { display:block; height:100%; border-radius:2px; background:var(--cat); }

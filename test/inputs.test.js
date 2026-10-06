@@ -77,14 +77,14 @@ function boot (fixture) {
   const call = (route, query = {}) => { let out; routes[route]({ query }, { json: v => { out = v }, status () { return this } }); return out }
   const bus = frame => listeners.get('canboatjs:rawoutput')(`2026-10-06T05:08:00.000Z R ${frame}`)
   const inputs = () => call('/monitor/items').items.filter(i => i.group === 'Inputs')
-  return { monitor, call, bus, inputs, deltas }
+  return { monitor, call, bus, inputs, deltas, dir }
 }
 
 // --- The bench: five switches on module 2, driving the lights on module 1.
 //     Time is stepped by hand so the trend rows are the same on every run.
 {
   const realNow = Date.now
-  const t0 = realNow()
+  const t0 = Math.floor(realNow() / 600e3) * 600e3 // the start of a ten-minute summary
   let clock = t0
   Date.now = () => clock
   try {
@@ -94,6 +94,15 @@ function boot (fixture) {
     const p = n => `electrical.czone.inputs.Switch_${n}.state`
     // the trend as [seconds since the start, level]
     const trend = n => b.call('/trend', { path: p(n), range: '1h' }).data.map(r => [Math.round((r[0] - t0) / 100) / 10, r[1]])
+    // what the page's fast update gets for switch n: [on, since, last time on], times in seconds since the start
+    const sec = ms => (typeof ms === 'number' ? (ms - t0) / 1000 : ms)
+    const fast = n => {
+      const got = b.call('/monitor/inputs')
+      assert.strictEqual(got.now, clock)
+      const i = got.inputs[b.inputs().find(x => x.name === `Switch ${n}`).id]
+      return i && [i.on, sec(i.since), i.lastOn && [sec(i.lastOn.at), i.lastOn.ms, sec(i.lastOn.until)]]
+    }
+    assert.deepStrictEqual(b.call('/monitor/inputs').inputs, {}) // nothing heard yet
 
     // Before the module has been heard the row says what is missing.
     assert.deepStrictEqual(b.inputs().map(i => i.name), ['Switch 1', 'Switch 2', 'Switch 3', 'Switch 4', 'Switch 5'])
@@ -104,6 +113,8 @@ function boot (fixture) {
     assert.deepStrictEqual(state(), [1, 2, 3, 4, 5].map(n => [`Switch ${n}`, true, false]))
     assert.deepStrictEqual(b.deltas, [1, 2, 3, 4, 5].map(n => [p(n), false]))
     b.monitor.sample()
+    // Found open when the plugin started: since when is not known.
+    assert.deepStrictEqual([1, 2, 3, 4, 5].map(fast), [1, 2, 3, 4, 5].map(() => [false, null, null]))
 
     // 4 s: switches 1 and 2 closed. Published as booleans, once per change.
     b.deltas.length = 0
@@ -111,6 +122,9 @@ function boot (fixture) {
     after(2000, '1CFF041B 27 99 02 0D 0A 00 00 00')
     assert.deepStrictEqual(b.deltas, [[p(1), true], [p(2), true]])
     assert.deepStrictEqual(state().map(s => s[2]), [true, true, false, false, false])
+    // The fast update: on since the change (4 s), not since the repeat (6 s).
+    assert.deepStrictEqual(fast(1), [true, 4, null])
+    assert.deepStrictEqual(fast(3), [false, null, null])
 
     // The lights they drive come on at module 1: that is the circuits' message
     // and does not touch the inputs. Nor does another module's bitmap, whether
@@ -134,6 +148,12 @@ function boot (fixture) {
     assert.deepStrictEqual(trend(1), [[2, 0], [4, 0], [4, 1], [14, 1], [14, 0]])
     assert.deepStrictEqual(trend(3), [[2, 0], [12, 0]]) // never changed: the first sample and the latest
     assert.strictEqual(b.call('/monitor/values').values[p(1)], false)
+    // Off since 14 s; last on from 4 s for 10 s. The 5-second list carries the same.
+    assert.deepStrictEqual(fast(1), [false, 14, [4, 10000, 14]])
+    assert.deepStrictEqual(fast(3), [false, null, null])
+    const s1 = b.inputs()[0]
+    assert.deepStrictEqual([sec(s1.since), sec(s1.lastOn.at), s1.lastOn.ms], [14, 4, 10000])
+    assert.strictEqual(b.inputs()[2].lastOn, null)
 
     // A tap on a momentary switch (bench, 6 Oct 2026: input 4 gave 80 00 then
     // 00 00 within the second). Both changes are published at once, and the
@@ -143,6 +163,8 @@ function boot (fixture) {
     after(1000, '1CFF041B 27 99 02 0D 80 00 00 00') // 23 s
     after(400, '1CFF041B 27 99 02 0D 00 00 00 00') // 23.4 s
     assert.deepStrictEqual(b.deltas, [[p(4), true], [p(4), false]])
+    // The page may ask only after the press is over: it is told when and how long.
+    assert.deepStrictEqual(fast(4), [false, 23.4, [23, 400, 23.4]])
     after(8600); b.monitor.sample() // 32 s
     assert.deepStrictEqual(trend(4), [[2, 0], [23, 0], [23, 1], [23.4, 1], [23.4, 0], [32, 0]])
 
@@ -155,7 +177,24 @@ function boot (fixture) {
     after(125e3)
     assert(b.inputs().every(i => !i.mapped && i.readings[0].value === null))
     assert.strictEqual(b.inputs()[0].note, 'Module 0x02 is reporting, but not this input')
+    assert.deepStrictEqual(b.call('/monitor/inputs').inputs, {}) // a quiet module's inputs are not passed off as current
+    // It comes back with switch 1 open and 5 closed. What happened while it was
+    // quiet is not known, so no times are made up; the next change is timed again.
+    after(1000, '1CFF041B 27 99 02 0D 00 02 00 00')
+    assert.deepStrictEqual(fast(1), [false, null, [4, 10000, 14]])
+    assert.deepStrictEqual(fast(5), [true, null, null])
+    after(3000, '1CFF041B 27 99 02 0D 00 00 00 00')
+    assert.deepStrictEqual(fast(5), [false, 163, [null, null, 163]]) // on from an unknown time until 163 s
+    after(1000, '1CFF041B 27 99 02 0D 00 02 00 00')
+    after(500, '1CFF041B 27 99 02 0D 00 00 00 00')
+    assert.deepStrictEqual(fast(5), [false, 164.5, [164, 500, 164.5]])
     b.monitor.stop()
+    // The ten-minute summary (long charts) of switch 4: every regular sample
+    // found it off, so the average is 0; the presses show as the maximum.
+    // The changes stored between samples do not count as time on.
+    const summaryDir = path.join(b.dir, 'trends', p(4), 'summary')
+    const summary = fs.readFileSync(path.join(summaryDir, fs.readdirSync(summaryDir)[0]), 'utf8').trim().split('\n').filter(l => /^\d/.test(l))
+    assert.deepStrictEqual(summary, [`${t0},0,0,1`])
   } finally { Date.now = realNow }
 }
 

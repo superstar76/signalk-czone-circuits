@@ -174,6 +174,71 @@
     pollTimer = setTimeout(async () => { await refresh(); schedule() }, visible ? 5000 : 60000)
   }
 
+  // ---- Switch inputs: their own light, frequent update
+  // The full list is fetched every 5 s, which is too slow for a switch. While
+  // the page is showing decoded inputs, their states alone are fetched every
+  // second. A press that began and ended between two fetches is still shown:
+  // the server reports when each input was last on, and the row shows ON for
+  // a moment when that time is new.
+  const INPUT_POLL_MS = 1000
+  const INPUT_HOLD_MS = 2500
+  let inputTimer = null
+  const held = new Map() // item id -> show ON until (ms)
+  const seenUntil = new Map() // item id -> end of the last time on that this page knows of
+  const hasInputs = () => items.some(i => i.group === 'Inputs' && i.mapped)
+  const isHeld = item => (held.get(item.id) || 0) > Date.now()
+  async function refreshInputs () {
+    let data
+    try {
+      const r = await fetch(`${API}/monitor/inputs`, { cache: 'no-store', credentials: 'include' })
+      if (!r.ok) return
+      data = await r.json()
+    } catch (_) { return }
+    let changed = false
+    for (const item of items) {
+      const now = data.inputs && data.inputs[item.id]
+      if (!now || item.group !== 'Inputs' || !item.readings[0]) continue
+      const r = item.readings[0]
+      const newUntil = now.lastOn ? now.lastOn.until : null
+      // new since this page last asked (not: found there when the page opened)
+      const pressed = seenUntil.has(item.id) && newUntil !== null && newUntil !== seenUntil.get(item.id)
+      seenUntil.set(item.id, newUntil)
+      if (r.value !== now.on || (item.since || null) !== (now.since || null) || pressed) changed = true
+      // only a press this page never showed as ON needs holding
+      if (pressed && !now.on && r.value !== true) held.set(item.id, Date.now() + INPUT_HOLD_MS)
+      if ((r.value !== now.on || pressed) && chart.open && chart.series.some(s => s.item.id === item.id)) setTimeout(() => { if (chart.open) loadTrend() }, 300)
+      r.value = now.on; item.since = now.since; item.lastOn = now.lastOn
+    }
+    for (const [id, until] of held) if (until <= Date.now()) { held.delete(id); changed = true }
+    if (changed && visible) render()
+  }
+  function scheduleInputs () {
+    clearTimeout(inputTimer)
+    if (!visible) return
+    inputTimer = setTimeout(async () => { if (hasInputs()) await refreshInputs(); scheduleInputs() }, INPUT_POLL_MS)
+  }
+  // "18:48:12", with the day when it was not today
+  function clock (ms) {
+    const d = new Date(ms)
+    const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    return d.toDateString() === new Date().toDateString() ? t : `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${t}`
+  }
+  function span (ms) {
+    const s = ms / 1000
+    if (s < 10) return `${Math.max(0.1, Math.round(s * 10) / 10).toFixed(1)} s`
+    if (s < 90) return `${Math.round(s)} s`
+    if (s < 5400) return `${Math.round(s / 60)} min`
+    return `${Math.round(s / 360) / 10} h`
+  }
+  // What a switch input last did, for under its name.
+  function inputHistory (item) {
+    const r = item.readings[0]
+    if (r && r.value === true) return typeof item.since === 'number' ? `on since ${clock(item.since)}` : ''
+    const last = item.lastOn
+    if (!last) return ''
+    return typeof last.at === 'number' ? `last on ${clock(last.at)} for ${span(last.ms)}` : `last on until ${clock(last.until)}`
+  }
+
   // ---- Rendering
   const primary = item => item.readings.find(r => r.path) || item.readings[0]
   // Where a reading's trend is stored: its live series, or the one it was last
@@ -190,14 +255,15 @@
 
   // One value box per live reading (e.g. battery V / A / %), each opens its trend.
   function valueBox (item, r) {
-    const f = fmt(r.unit, r.value, r.path)
+    const isOn = r.unit === 'bool' && (r.value === true || isHeld(item))
+    const f = fmt(r.unit, isOn ? true : r.value, r.path)
     const on = chart.open && chart.series.some(s => s.id === seriesId(item, r)) ? 'active' : ''
     const level = r.unit === 'ratio' && typeof r.value === 'number' ? `<span class="mon-level"><span style="width:${Math.max(0, Math.min(100, r.value * 100))}%"></span></span>` : ''
     // [fork] A value box opens that value's trend, and so does the arrow at
     // the end of the row. The rest of the row does not (a touch anywhere on
     // it used to, by accident).
     const attrs = r.series ? `data-item="${esc(item.id)}" data-key="${esc(r.key)}" title="${esc(r.label)}: show trend"` : `title="${esc(r.label)}"`
-    return `<div class="mon-value ${on} ${r.series ? 'clickable' : ''}" ${attrs}><span>${f.text}<small>${esc(f.unit)}</small></span>${level}</div>`
+    return `<div class="mon-value ${on} ${isOn ? 'is-on' : ''} ${r.series ? 'clickable' : ''}" ${attrs}><span>${f.text}<small>${esc(f.unit)}</small></span>${level}</div>`
   }
 
   function row (item) {
@@ -210,6 +276,7 @@
     // Not on the bus: say which NMEA 2000 instance the ZCF expects, since that
     // is the number to set on the sending device.
     const waiting = item.instance !== undefined ? `Nothing is sending instance ${item.instance} on NMEA 2000` : `Waiting for ${(p && p.candidates[0]) || 'a Signal K path'}`
+    const history = item.group === 'Inputs' && item.mapped ? inputHistory(item) : ''
     const sub = item.mapped ? (where || groupLabel(g)) : (item.note || waiting)
     const live = item.mapped
     const shown = live ? item.readings.filter(r => r.path) : (p ? [p] : [])
@@ -217,7 +284,7 @@
     const clickable = p && trendKey(p)
     return `<div class="circuit mon-row ${shown.length > 1 ? 'multi' : ''} ${live ? '' : 'unmapped'} ${active}" style="--cat:${groupVar(g)}">
       <span class="mon-icon">${groupIcon(g)}</span>
-      <div class="circuit-name"><strong>${esc(item.name)}</strong><small>${esc(sub)}</small></div>
+      <div class="circuit-name"><strong>${esc(item.name)}</strong><small>${esc(sub)}</small>${history ? `<small class="mon-last">${esc(history)}</small>` : ''}</div>
       <div class="mon-right"><div class="status ${live ? 'on' : ''}"><span class="status-dot"></span>${live ? 'LIVE' : 'NOT ON BUS'}</div><div class="mon-values">${shown.map(r => valueBox(item, r)).join('')}</div></div>
       ${clickable ? `<button type="button" class="arrow trend-arrow" title="Trend" aria-label="${esc(item.name)} trend" data-item="${esc(item.id)}" data-key="${esc(p.key)}">›</button>` : '<span class="arrow"></span>'}</div>`
   }
@@ -472,11 +539,22 @@
     const d = s.data
     if (!d.length) return null
     const vals = d.map(p => p[1])
+    // The average is weighted by time: full-detail rows are written on change,
+    // so they are not evenly spaced. A row's value holds until the next row;
+    // a break in the recording counts for nothing.
+    let sum = 0
+    let span = 0
+    for (let i = 0; i < d.length - 1; i++) {
+      const dt = d[i + 1][0] - d[i][0]
+      if (dt <= 0 || dt > s.gapMs) continue
+      sum += d[i][1] * dt
+      span += dt
+    }
     return {
       dp: d[0][2],
       now: vals[vals.length - 1],
       min: Math.min(...d.map(p => p[3] === null ? p[1] : p[3])),
-      avg: vals.reduce((a, b) => a + b, 0) / vals.length,
+      avg: span > 0 ? sum / span : vals.reduce((a, b) => a + b, 0) / vals.length,
       max: Math.max(...d.map(p => p[4] === null ? p[1] : p[4]))
     }
   }
@@ -767,6 +845,7 @@
         if (window.innerWidth <= 780) document.querySelector('#monitorView').scrollIntoView({ behavior: 'smooth', block: 'start' })
       }
       schedule()
+      scheduleInputs()
     },
     count: () => monitored().filter(i => i.mapped).length,
     // The groups on the Monitoring tab, for the host page's category list.
