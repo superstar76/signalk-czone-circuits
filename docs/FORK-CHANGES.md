@@ -37,9 +37,10 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
 | Tanks | tank senders | level %, volume |
 | Temperatures | temperature senders | °C |
 | Environment | pressure senders | hPa / kPa |
-| Inputs | switch inputs | listed; state not decoded yet |
+| Inputs | switch inputs | ON / OFF on a Signal Interface; listed but not decoded yet on other kinds of module |
 
 - **Grouping:** a DC meter goes under its DC Type from the Configuration Tool, so a solar meter is under Solar and not under Batteries.
+- **Switch inputs:** each shows ON or OFF, live, and is published at `electrical.czone.inputs.<name>.state`. The state comes from the status message of the module the switch is wired to (PGN 65284) and follows the switch itself, not the circuit it controls. It is trended like any other value: the chart shows the share of time the input was on. The module sends the message when an input changes, so a short press is caught (a tap on a momentary switch was, on the bench), and each change is stored in the trend at the moment it happens, not at the next ten-second sample. Worked out on the test bench on 6 October 2026 for a Signal Interface (five switches, one bit each at position 2 × input + 1, counting inputs from 0). An input on a kind of module not yet worked out says so on its row and shows no state, and if the module stops reporting the row goes back to NOT ON BUS within two minutes.
 - **Live or not:** each row says LIVE or NOT ON BUS. A row that is not on the bus names the NMEA 2000 instance the ZCF expects ("Nothing is sending instance 3 on NMEA 2000"), which is the number to set on the sending device.
 - **Looks:** built from the webapp's own classes, so it matches the circuit list. Group colours are CSS variables. A group heading carries a faint band of the accent blue and its rows are indented under it, so headings and rows are told apart at a glance.
 - **Opening a trend:** a value box opens that value's trend, and the arrow at the end of the row opens the item's. The rest of the row does nothing, so a stray touch does not open a chart.
@@ -215,6 +216,7 @@ These are in the brief for Matt, with evidence, for his parser.
 |---|---|
 | `electrical.czone.<circuit>.current` | amps |
 | `electrical.czone.<circuit>.temperature` | kelvin, where a temperature input is named after the circuit |
+| `electrical.czone.inputs.<input>.state` | `true` / `false`: a switch input (Signal Interface) |
 
 Matt's `electrical.czone.<circuit>.switch.state` and `.switch.brightness` are unchanged. Meter and sender readings are held in the plugin for the Monitoring tab and trends; they are not published to Signal K.
 
@@ -339,7 +341,7 @@ The chartplotter view adds a second plugin, `signalk-navico-embedder`, which con
 
 - **Matt's beta.22 restructure is not merged.** A clean-up pass of the fork is planned with that merge: one source of state for the pane, one way of choosing a sender, and the monitor's main file split up.
 - **Our own copy of the circuit parser.** `lib/zcf-circuits.js` is Matt's structural parser plus the hidden-duplicate rule. Once his has the rule, ours can go.
-- **Switch inputs** are listed but their state is not decoded.
+- **Switch inputs on a Control X PLUS** (Compass Rose) are listed but not decoded: where they sit in that module's status message is not known yet. One operation of an input on the boat with a capture running will show it.
 - **Per-display permissions** are not respected: a circuit that only one display may switch off can be switched off from the webapp and the pane. Confirm before turning off (section 1.9) covers the common case by hand: the installer nominates the circuits.
 - **Pane order** is alphabetical; Victron has no setting for it.
 - **The GX unit setting** reads empty on Compass Rose and is treated as °C. What it reads when set to Fahrenheit has not been seen.

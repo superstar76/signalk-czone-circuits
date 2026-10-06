@@ -47,10 +47,16 @@
       case 'A': return { v, u: 'A', d: 1 }
       case 'W': return { v, u: 'W', d: 0 }
       case 'Hz': return { v, u: 'Hz', d: 1 }
+      // A switch input, trended as 1 while on: charted as the share of time on.
+      case 'bool': return { v: v * 100, u: '% on', d: 0 }
       default: return { v, u: unit || '', d: 2 }
     }
   }
-  const fmt = (unit, v, path) => { const c = convert(unit, v, path); return c ? { text: c.v.toFixed(c.d), unit: c.u } : { text: '—', unit: '' } }
+  const fmt = (unit, v, path) => {
+    if (unit === 'bool') return { text: v === true ? 'ON' : v === false ? 'OFF' : '—', unit: '' } // live switch input
+    const c = convert(unit, v, path)
+    return c ? { text: c.v.toFixed(c.d), unit: c.u } : { text: '—', unit: '' }
+  }
 
   // ---- DOM scaffolding (added once, next to the circuits section)
   function mount () {
