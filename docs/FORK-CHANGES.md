@@ -1,16 +1,16 @@
 # signalk-czone-circuits: the monitoring fork
 
-What the fork adds to Matt Mitchell's plugin and what it changes, as of 4 October 2026.
+What the fork adds to Matt Mitchell's plugin and what it changes, as of 13 October 2026.
 
 **Fork:** `github.com/superstar76/signalk-czone-circuits`, branch `monitoring`
 **Based on:** Matt Mitchell's `signalk-czone-circuits`, `main` at `45c47d1` (beta.20), merged in with no conflicts. His beta.22 restructure is not merged yet.
-**State:** 4 October 2026
+**State:** 13 October 2026
 **Run on:** the CZone test bench and Compass Rose, both on a Cerbo GX with Venus OS 3.80 and Signal K 2.27, and both reachable remotely over Tailscale
 **Size:** about 4,300 lines of new code in 15 new files (and two small shell scripts), 2,000 lines of new tests in 10 new test files, and about 430 lines added to four of Matt's files
 
 ## Summary
 
-Matt's plugin reads a CZone configuration file (ZCF), lists the circuits in a webapp and switches them over NMEA 2000. The fork keeps all of that and adds six things, all driven by the same ZCF with nothing set up by hand:
+Matt's plugin reads a CZone configuration file (ZCF), lists the circuits in a webapp and switches them over NMEA 2000. The fork keeps all of that and adds seven things, all driven by the same ZCF with nothing set up by hand:
 
 - **Monitoring:** every meter and sender in the CZone configuration, live, in a Monitoring tab.
 - **Trends:** history for every monitored value and every circuit's current, kept on an SD card.
@@ -18,6 +18,7 @@ Matt's plugin reads a CZone configuration file (ZCF), lists the circuits in a we
 - **Victron switch pane:** the CZone circuits as switches on the GX touch screen, Remote Console and VRM.
 - **A truer circuit list:** state on boats whose ZCF has no status table, every category named, and circuits that no CZone display would list left out.
 - **On the chartplotter:** the webapp as a tile on a B&G / Simrad / Lowrance plotter, with a layout for its touch screen.
+- **Third-party switches from CZone:** a Shelly, or any output in the Victron switch pane, switched from a CZone display through a virtual circuit, and kept in step both ways.
 
 The rule throughout: once the ZCF is uploaded, the data should appear. Where the bus is ambiguous (several devices on one instance), the ZCF decides.
 
@@ -37,10 +38,10 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
 | Tanks | tank senders | level %, volume |
 | Temperatures | temperature senders | °C |
 | Environment | pressure senders | hPa / kPa |
-| Inputs | switch inputs | ON / OFF on a Signal Interface; listed but not decoded yet on other kinds of module |
+| Inputs | switch inputs | ON / OFF on a Signal Interface and a Combination Output Interface; listed but not decoded yet on a Control X PLUS |
 
 - **Grouping:** a DC meter goes under its DC Type from the Configuration Tool, so a solar meter is under Solar and not under Batteries.
-- **Switch inputs:** each shows ON or OFF, live, and is published at `electrical.czone.inputs.<name>.state`. The state comes from the status message of the module the switch is wired to (PGN 65284) and follows the switch itself, not the circuit it controls. It is trended like any other value: the chart shows the share of time the input was on. The module sends the message when an input changes, so a short press is caught (a tap on a momentary switch was, on the bench), and each change is stored in the trend at the moment it happens, not at the next ten-second sample. On the page, inputs have their own light update every second (the rest of Monitoring stays at five seconds), an input that is on is highlighted, and under its name the row says when it went on, or when it was last on and for how long. A press that was over before the page asked is shown as ON for a couple of seconds so it is not missed, and a trend that is open on that input reloads by itself. The times are kept in memory: after Signal K restarts they start again at the next operation (the trend keeps the history). The Average on a trend is now weighted by time for every value (rows are written on change, so they are not evenly spaced and a plain average of the rows was wrong: four 0.3-second taps in 25 seconds read 44 % on, now 5 %). Known limit: a value that changes more than about 400 times inside a chart of 48 hours or less is thinned by the server with a plain average, so the Average of such a chart is approximate. Worked out on the test bench on 6 October 2026 for a Signal Interface (five switches, one bit each at position 2 × input + 1, counting inputs from 0). An input on a kind of module not yet worked out says so on its row and shows no state, and if the module stops reporting the row goes back to NOT ON BUS within two minutes.
+- **Switch inputs:** each shows ON or OFF, live, and is published at `electrical.czone.inputs.<name>.state`. The state comes from the status message of the module the switch is wired to (PGN 65284) and follows the switch itself, not the circuit it controls. It is trended like any other value: the chart shows the share of time the input was on. The module sends the message when an input changes, so a short press is caught (a tap on a momentary switch was, on the bench), and each change is stored in the trend at the moment it happens, not at the next ten-second sample. On the page, inputs have their own light update every second (the rest of Monitoring stays at five seconds), an input that is on is highlighted, and under its name the row says when it went on, or when it was last on and for how long. A press that was over before the page asked is shown as ON for a couple of seconds so it is not missed, and a trend that is open on that input reloads by itself. The times are kept in memory: after Signal K restarts they start again at the next operation (the trend keeps the history). The Average on a trend is now weighted by time for every value (rows are written on change, so they are not evenly spaced and a plain average of the rows was wrong: four 0.3-second taps in 25 seconds read 44 % on, now 5 %). Known limit: a value that changes more than about 400 times inside a chart of 48 hours or less is thinned by the server with a plain average, so the Average of such a chart is approximate. Worked out on the test bench on 6 October 2026 for a Signal Interface (five switches, one bit each at position 2 × input + 1, counting inputs from 0). A module also sends a separate input message (PGN 65308) as an input changes, with the same layout; the plugin reads both. A Combination Output Interface (COI) sends its inputs only in that message, numbered in its configuration from 16: input i is at bit 2 × (i − 16) + 1. Worked out from a capture Matt made on SugarShack on 27 September 2026 (all four COI inputs, each on and off). Signal K's parser reports PGN 65308 under another number, so the plugin recognises the message by its CAN identifier. An input on a kind of module not yet worked out says so on its row and shows no state, and if the module stops reporting the row goes back to NOT ON BUS within two minutes.
 - **Live or not:** each row says LIVE or NOT ON BUS. A row that is not on the bus names the NMEA 2000 instance the ZCF expects ("Nothing is sending instance 3 on NMEA 2000"), which is the number to set on the sending device.
 - **Looks:** built from the webapp's own classes, so it matches the circuit list. Group colours are CSS variables. A group heading carries a faint band of the accent blue and its rows are indented under it, so headings and rows are told apart at a glance.
 - **Opening a trend:** a value box opens that value's trend, and the arrow at the end of the row opens the item's. The rest of the row does nothing, so a stray touch does not open a chart.
@@ -120,6 +121,7 @@ An opt-in setting registers the circuits with the GX as `com.victronenergy.switc
   The other circuits it switches are in the hover text ("Also switches: Buzzer"). A circuit that owns no load at all (SugarShack's All Lights On, Welcome Home) is a group and shows no load, like a Mode.
 - **No flicker, and sliders stay put.** The lists (circuits, navigation, categories, Modes, Monitoring) are updated in place instead of being rebuilt on every live update. A dimmer slider follows the boat but is not pulled away while it is being moved.
 - **Not logged in is said plainly.** When Signal K refuses the plugin's data, the page says "Not logged in to Signal K" and links to the login, instead of showing an empty list under "Connected". A login is kept per address, so `venus.local` and the IP address each need their own.
+- **The connection line tells the truth.** It said "Connected" whenever the page had read the circuit list once, even with the live feed down, so a page could say Connected while nothing on it moved. It now says Connected only while the live feed is up. Otherwise: "Circuits loaded · connecting live updates…" before the feed has ever opened, and "Live updates lost · reconnecting… (circuits as of 10:36:46)" after it drops, with the time of the last read.
 - **The category list follows the tab.** On AC, DC, In Use or Favorites, only the categories of the circuits in that tab are listed, with counts for that tab. A category narrows the tab; a second click clears it. On Monitoring the list is the monitoring groups.
 
 ### 1.7 Settings page
@@ -155,6 +157,22 @@ The plugin cannot work out which circuits these are: the ZCF says which output a
 - **Modes are not held up.** A Mode is switched often and on purpose, and a question answered by reflex protects nothing. What a Mode switches is the installer's choice: a freezer that must stay on is left out of the Mode in the CZone configuration, where every display and keypad then respects it too.
 - **Not affected:** CZone's own keypads and displays.
 - **Checked** in a current Chromium and in Chromium 69 (the plotter's version), and by the plugin's tests. Installed on Compass Rose on 4 October: the question appears in the webapp, and on the GX an off from the switch pane goes back to on at once. Still to be seen: the question on the plotter.
+
+### 1.10 Third-party switches from CZone
+
+A switch that is not on the CZone network (a Shelly, a GX relay, any output in the Victron switch pane) can be switched from a CZone display or keypad, with no switchbank and nothing extra on the bus.
+
+- **In the CZone configuration:** add a virtual circuit for it (no output of its own) and put it on the display like any other circuit. A virtual circuit is held by a CZone module like any circuit: on the bench the Output Interface reports "Shelly Relay - Powerboard" as channel 6 of its status message, and a display press sends the usual command with the module answering.
+- **In the plugin's settings,** under **Third-party switches:** choose that circuit, then either a Victron output (the list shows what the GX has, by the names given on the GX) or a Shelly by IP address and channel, with a **Test** button that asks the Shelly for its state. Then **Link**.
+- **Both ways:** the switch follows the CZone circuit (display, keypad, webapp, plotter), and the circuit follows the switch when it is switched from anywhere else (the Victron pane, VRM, the Shelly app or its button). Switching the circuit back needs NMEA 2000 sending allowed.
+- **Two routes, chosen per link:**
+  - *Victron output, through the GX:* the plugin writes the output's state on the GX's D-Bus. Works for anything Venus OS lists as a switchable output, whatever made it. The service name carries the Shelly's MAC address, so renaming it on the GX does not break the link. Needs the plugin to run on the GX.
+  - *Shelly, directly:* the plugin uses the Shelly's own local interface (`/rpc/Switch.Set`, `/rpc/Switch.GetStatus`). No GX needed, so it also works on a Pi. Shelly Gen2 or later, with no password; the address should be reserved in the router.
+- **Rules, so the two sides never fight:** a side is acted on only when it changes, and only if the other side differs; the plugin's own change coming back is recognised and not passed on; at start, or when a side is first seen, the switch is taken as right and the circuit set to match; a change one side could not take (switch unreachable or refusing, sending off) is kept and tried again every 15 seconds; a switch that accepts a command but does not change is reported as "No confirmation" after 6 seconds, then tried again in its turn. The switch is read every 2 seconds; a CZone change is acted on as its status arrives.
+- **Status in the settings:** each link shows in step (ON / OFF), out of step, waiting, or the error ("Not reachable: no answer", "the Shelly has a password set").
+- **Not twice in the switch pane:** a linked circuit is left out of the plugin's own Victron switch pane, since the real output is already there.
+- **Self-contained:** `lib/bridge/` has no CZone or Signal K code in it; it is given a way to read and write a circuit and the two drivers, so it can move to Matt's plugin as it is.
+- **Tested** by the plugin's tests (the linking rules on a stand-in switch and circuit, both drivers against stand-ins, and the whole plugin with the bench configuration: a Shelly switched off brings a CZone OFF command for the virtual circuit). On the bench by hand: both Shelly commands, and the Victron output by `dbus` from the command line, before the plugin was written. The linked plugin is still to be tried on the bench.
 
 ## 2. How readings are found with nothing configured
 
@@ -209,6 +227,7 @@ These are in the brief for Matt, with evidence, for his parser.
 | Trend folder | automatic |
 | Trend sample rate | 10 seconds |
 | Keep full-detail trend data for | as long as there is space |
+| Third-party switches (a list of links: circuit, and a Victron output or a Shelly address and channel) | empty |
 
 ## 5. Signal K paths added
 
@@ -216,7 +235,7 @@ These are in the brief for Matt, with evidence, for his parser.
 |---|---|
 | `electrical.czone.<circuit>.current` | amps |
 | `electrical.czone.<circuit>.temperature` | kelvin, where a temperature input is named after the circuit |
-| `electrical.czone.inputs.<input>.state` | `true` / `false`: a switch input (Signal Interface) |
+| `electrical.czone.inputs.<input>.state` | `true` / `false`: a switch input (Signal Interface, Combination Output Interface) |
 
 Matt's `electrical.czone.<circuit>.switch.state` and `.switch.brightness` are unchanged. Meter and sender readings are held in the plugin for the Monitoring tab and trends; they are not published to Signal K.
 
@@ -235,12 +254,17 @@ All under `/plugins/signalk-czone-circuits`.
 | `/trend/status` | where trends are stored, free space, sample rate |
 | `/trend/card-setup` | downloads `venus-data.tgz`, the card setup file for a GX |
 | `/trend?path=&range=` | a series' data |
+| `/bridge/status` | each third-party switch link: both sides, in step or not, waiting on, last action, error |
+| `/bridge/outputs` | the switchable outputs the GX has, as offered in the settings |
+| `/bridge/shelly?host=&channel=` | asks a Shelly for its state (the settings' Test button) |
 | `/victron/status` | the switch pane: circuits it has as on, any that disagree with the plugin, the GX's unit setting, recent requests |
 
 ## 7. Faults found and fixed along the way
 
 | Fault | Cause | Fix |
 |---|---|---|
+| "Connected" with the live feed down | The line was set by any successful read of the circuit list | Connected only while the live feed is up; otherwise says what is happening |
+| COI inputs never changed (SugarShack) | A COI sends inputs only in PGN 65308, which Signal K's parser reports under another number | Recognised by CAN identifier; COI layout added |
 | Every circuit off, only ON could be sent (Compass Rose) | ZCF has no status table | State from module and channel |
 | No circuit current (Compass Rose) | Control X PLUS uses PGN 130825 | Decoder for the packed table |
 | Switch pane all off after a restart | The pane read state back from Signal K and missed it | The pane takes state from the plugin's own decoded state |
@@ -278,6 +302,9 @@ lib/monitor/wire.js       candump listener for third-party devices
 lib/victron/vedbus.js     minimal Victron D-Bus service
 lib/victron/switches.js   CZone circuits as GX switchable outputs
 lib/confirm-off.js        circuits nominated to confirm before off
+lib/bridge/index.js       third-party switches: linking rules (self-contained)
+lib/bridge/shelly.js      Shelly driver (local RPC over HTTP)
+lib/bridge/victron.js     Victron switchable output driver (GX D-Bus)
 lib/fork-mapping.js       state fallback, categories and groups, hidden circuits, a circuit's own loads
 lib/zcf-circuits.js       structural circuit parser (with the hidden-duplicate rule)
 lib/zcf-monitor.js        meters, meter settings, inputs
@@ -286,23 +313,23 @@ public/monitor.css
 docs/INSTALL-AND-USE.md   installation and use, for the person fitting or using the plugin
 docs/ZCF-FORMAT.md        layouts, checked across the sample ZCFs
 docs/venus-sdcard-rw.sh   a copy of the card script, for reading
-test/                     12 new test files, 2 new ZCF fixtures
+test/                     14 new test files, 3 new ZCF fixtures
 ```
 
 Changes to Matt's files:
 
 | File | Lines | Change |
 |---|---|---|
-| `index.js` | +153, −5 | Create, start and stop the monitor; hand the switch pane the send functions and the decoded state; one call after `zcf.load()` to `fork-mapping`; `current`, `temperature` and `notShown` on `/circuits`; confirm before off (the off route, PUT handlers, the pane's send functions); ten settings |
-| `public/index.html` | +432, −25 | Monitoring tab; amps under ON; trend arrow; temperature chip; category list that follows the tab; icons for the new categories; circuit label shows the circuit's own load, numbered as the Configuration Tool does; "not logged in" message; chartplotter layout (styles, drawn icons, drag-to-scroll, self-reload, diagnostic readout); lists updated in place; the confirm-before-off question and padlock |
-| `public/remoteEntry.js` | +144 | Controls for the ten settings, including the list of circuits that confirm before off; saved confirmation |
+| `index.js` | +242, −5 | Create, start and stop the monitor; hand the switch pane the send functions and the decoded state; one call after `zcf.load()` to `fork-mapping`; `current`, `temperature` and `notShown` on `/circuits`; confirm before off (the off route, PUT handlers, the pane's send functions); third-party switch links (start, stop, routes, a hook in status decoding); eleven settings |
+| `public/index.html` | +445, −29 | Monitoring tab; amps under ON; trend arrow; temperature chip; category list that follows the tab; icons for the new categories; circuit label shows the circuit's own load, numbered as the Configuration Tool does; "not logged in" message; chartplotter layout (styles, drawn icons, drag-to-scroll, self-reload, diagnostic readout); lists updated in place; the confirm-before-off question and padlock; a connection line that says Connected only while the live feed is up |
+| `public/remoteEntry.js` | +256 | Controls for the eleven settings, including the list of circuits that confirm before off and the third-party switch links with their status; saved confirmation |
 | `package.json` | +4, −1 | `dbus-native` dependency; the new tests in `npm test` |
 
 ## 9. Tests
 
-`npm test` runs Matt's suite and the fork's, 25 files, all passing. The fork's tests use frames captured on the bench and on Compass Rose, and eight sample ZCFs (two bench, two Compass Rose, Meitaki, Persevere, Sel Citron, SugarShack).
+`npm test` runs Matt's suite and the fork's, 27 files, all passing. The fork's tests use frames captured on the bench and on Compass Rose, and nine sample ZCFs (three bench, two Compass Rose, Meitaki, Persevere, Sel Citron, SugarShack).
 
-The webapp pages are not covered by `npm test`. They were checked by hand in a current Chromium and, for the chartplotter layout, in Chromium 69.0.3494, the version the plotter runs: layout, drag scrolling of the list and of the left column, a drag from a button not switching it, a tap switching it, the desktop page unchanged, and the confirm-before-off question (asked, kept on, turned off, and a page that did not know the circuit was nominated). The settings panel's new section was rendered and exercised in a current Chromium.
+The webapp pages are not covered by `npm test`. They were checked by hand in a current Chromium and, for the chartplotter layout, in Chromium 69.0.3494, the version the plotter runs: layout, drag scrolling of the list and of the left column, a drag from a button not switching it, a tap switching it, the desktop page unchanged, and the confirm-before-off question (asked, kept on, turned off, and a page that did not know the circuit was nominated). The settings panel's new sections were rendered and exercised in a current Chromium, and the connection line was driven through a live feed refused, opened, dropped and restored.
 
 ## 10. What has been confirmed where
 
@@ -328,6 +355,12 @@ The webapp pages are not covered by `npm test`. They were checked by hand in a c
 | No flicker of ON buttons on the plotter | no plotter | yes |
 | Updates reach the plotter without a restart | no plotter | yes |
 | Confirm before turning off | not installed | yes in the webapp and the switch pane; plotter not yet |
+| Switch inputs, Signal Interface | yes (65284 and 65308) | does not apply |
+| Switch inputs, COI | no COI; decoded from Matt's SugarShack capture | does not apply |
+| Switch inputs, Control X PLUS | does not apply | not decoded yet |
+| Connection line | not yet confirmed there | not yet confirmed there |
+| Third-party switch, Victron output | Shelly PM1 switched by D-Bus by hand; plugin link not yet tried | not installed |
+| Third-party switch, Shelly direct | Shelly PM1 switched by HTTP by hand; plugin link not yet tried | not installed |
 | GX Outputs list steady against small wobbles in current | not yet confirmed there | yes (still moves on a change of 0.2 A or more, which renames the switch) |
 
 The bench was updated on the evening of 3 October; rows marked "not re-checked" or "not yet confirmed" are still to be checked there. Both Cerbos have Tailscale, so either can be reached from the other site.
@@ -343,6 +376,7 @@ The chartplotter view adds a second plugin, `signalk-navico-embedder`, which con
 - **Matt's beta.22 restructure is not merged.** A clean-up pass of the fork is planned with that merge: one source of state for the pane, one way of choosing a sender, and the monitor's main file split up.
 - **Our own copy of the circuit parser.** `lib/zcf-circuits.js` is Matt's structural parser plus the hidden-duplicate rule. Once his has the rule, ours can go.
 - **Switch inputs on a Control X PLUS** (Compass Rose) are listed but not decoded: where they sit in that module's status message is not known yet. One operation of an input on the boat with a capture running will show it.
+- **Third-party switches:** a Shelly with a password is not supported yet (digest login). A Shelly Gen1 is not supported. Dimmers and other non-on/off outputs are not linked, only on and off.
 - **Per-display permissions** are not respected: a circuit that only one display may switch off can be switched off from the webapp and the pane. Confirm before turning off (section 1.9) covers the common case by hand: the installer nominates the circuits.
 - **Pane order** is alphabetical; Victron has no setting for it.
 - **The GX unit setting** reads empty on Compass Rose and is treated as °C. What it reads when set to Fahrenheit has not been seen.

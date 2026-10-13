@@ -9,6 +9,9 @@ const signalk = require('./lib/signalk')
 const { createMonitor } = require('./lib/monitor')
 const { prepareMapping } = require('./lib/fork-mapping')
 const confirmOffLib = require('./lib/confirm-off')
+const { createBridge, bridgeEntries } = require('./lib/bridge')
+const { createShellyDriver } = require('./lib/bridge/shelly')
+const { createVictronDriver } = require('./lib/bridge/victron')
 
 const MAX_UPLOAD_BYTES = 1024 * 1024
 const CZONE_CONFIG_BLOCK_HEADER = 23
@@ -121,6 +124,41 @@ module.exports = function (app) {
   let lastNetworkConfig = null
   // [fork] circuits nominated to confirm before off, by circuit name
   let confirmOff = new Set()
+
+  // [fork] Third-party switches driven from CZone circuits (lib/bridge). The
+  // GX's D-Bus is only opened when a Victron output is used or listed.
+  let bridgeBus = null
+  const getBridgeBus = () => {
+    if (!bridgeBus) {
+      bridgeBus = require('dbus-native').systemBus()
+      if (bridgeBus.connection && typeof bridgeBus.connection.on === 'function') {
+        bridgeBus.connection.on('error', err => { log(`Bridge D-Bus: ${err && err.message ? err.message : err}`); closeBridgeBus() })
+      }
+    }
+    return bridgeBus
+  }
+  const closeBridgeBus = () => {
+    const b = bridgeBus
+    bridgeBus = null
+    if (b && b.connection && typeof b.connection.end === 'function') { try { b.connection.end() } catch (_) {} }
+  }
+  const bridgeDrivers = {
+    victron: createVictronDriver({ getBus: () => getBridgeBus() }),
+    shelly: createShellyDriver()
+  }
+  const bridge = createBridge({
+    log: m => log(m),
+    readCircuit: name => {
+      const st = runtimeState.get(name)
+      return st && st.statusObserved ? st.state === 'ON' : undefined
+    },
+    writeCircuit: (name, on) => {
+      const c = mapping && mapping.circuits.find(x => x.name === name)
+      if (!c) throw new Error(`no circuit "${name}" in the CZone configuration`)
+      sendCircuitState(c, on)
+    },
+    drivers: bridgeDrivers
+  })
 
   const configDir = app.config && app.config.configPath
     ? path.join(app.config.configPath, 'plugin-config-data', PLUGIN_ID)
@@ -622,6 +660,7 @@ module.exports = function (app) {
       const stateSource = signalk.nmea2000Source(frame.source, frame.pgn)
       const observedState = enabled ? 'ON' : 'OFF'
       log(`CZone STATE: ${circuit.name} -> ${observedState} (runtime ${Number(circuit.statusModule).toString(16).padStart(2, '0')}:${Number(circuit.statusMask).toString(16).padStart(8, '0')}, src=${frame.source})`)
+      bridge.onCircuit(circuit.name, enabled) // [fork] third-party switch follows
       const published = publishCircuitDelta(circuit, signalk.statePath(circuit), enabled, stateSource)
       if (published) {
         log(`CZone STATE PUBLISHED: ${signalk.statePath(circuit)}=${observedState} source=${JSON.stringify(stateSource)}`)
@@ -1055,6 +1094,24 @@ module.exports = function (app) {
           title: 'Let the Victron switch pane and other apps turn those circuits off',
           default: false,
           description: 'The Victron switch pane and other Signal K apps cannot ask "are you sure?". Unticked, an off from them is not acted on and the switch returns to on; the circuit can still be turned off from the webapp, a chartplotter or a CZone keypad.'
+        },
+        bridges: {
+          type: 'array',
+          title: 'Third-party switches',
+          description: 'Link a CZone circuit (normally a virtual circuit added for the purpose) to a switch that is not on the CZone network. The switch follows the CZone circuit, and the circuit follows the switch.',
+          default: [],
+          items: {
+            type: 'object',
+            required: ['circuit', 'target'],
+            properties: {
+              circuit: { type: 'string', title: 'CZone circuit', ...(mapping ? { enum: mapping.circuits.map(c => c.name) } : {}) },
+              target: { type: 'string', title: 'Switch', enum: ['victron', 'shelly'], enumNames: ['Victron output (through the GX)', 'Shelly (directly, by IP address)'] },
+              output: { type: 'string', title: 'Victron output (service#output, chosen in the panel)' },
+              label: { type: 'string', title: 'Name' },
+              host: { type: 'string', title: 'Shelly IP address' },
+              channel: { type: 'number', title: 'Shelly channel', default: 0 }
+            }
+          }
         }
       }
     }),
@@ -1076,6 +1133,11 @@ module.exports = function (app) {
         }
       })
       monitor.start(settings, zcfPath())
+      // [fork] third-party switches: only circuits this configuration has
+      const links = bridgeEntries(settings.bridges)
+      const known = links.filter(l => mapping && mapping.circuits.some(c => c.name === l.circuit))
+      for (const l of links) if (!known.includes(l)) log(`Bridge: no circuit "${l.circuit}" in the CZone configuration; link ignored`)
+      bridge.start(known)
       registerCircuitPutHandlers()
       registerModePutHandlers()
 
@@ -1135,6 +1197,8 @@ module.exports = function (app) {
     },
 
     stop: () => {
+      bridge.stop()
+      closeBridgeBus()
       monitor.stop()
       if (startupModeInferenceTimer) clearTimeout(startupModeInferenceTimer)
       startupModeInferenceTimer = null
@@ -1161,6 +1225,8 @@ module.exports = function (app) {
       // upstream be38f40.
       registeredPutPaths.clear()
     },
+
+    _bridgePoll: () => bridge.poll(), // for tests
 
     registerWithRouter: router => {
       monitor.registerRoutes(router)
@@ -1233,8 +1299,25 @@ module.exports = function (app) {
           networkRead: lastNetworkConfig ? { ...lastNetworkConfig, blocks: undefined } : null,
           nmeaReady,
           // [fork] the circuits offered under "Confirm before turning off"
-          circuitNames: confirmOffLib.choices({}, mapping ? mapping.circuits : []).map(n => n.value)
+          circuitNames: confirmOffLib.choices({}, mapping ? mapping.circuits : []).map(n => n.value),
+          // [fork] every circuit, virtual ones included, for third-party switches
+          allCircuitNames: mapping ? mapping.circuits.map(c => c.name).sort((a, b) => a.localeCompare(b)) : []
         })
+      })
+
+      // [fork] Third-party switches: how each link stands, and what can be linked.
+      router.get('/bridge/status', (_req, res) => res.json({ links: bridge.status() }))
+      router.get('/bridge/outputs', (_req, res) => {
+        bridgeDrivers.victron.list()
+          .then(outputs => res.json({ available: true, outputs }))
+          .catch(err => res.json({ available: false, outputs: [], detail: `No Victron GX found (${err.message})` }))
+      })
+      router.get('/bridge/shelly', (req, res) => {
+        const host = String(req.query.host || '').trim()
+        if (!/^[\w.-]+(:\d{1,5})?$/.test(host)) return res.status(400).json({ ok: false, detail: 'Give the Shelly\'s IP address' })
+        bridgeDrivers.shelly.status({ host, channel: Number(req.query.channel) || 0 })
+          .then(s => res.json({ ok: typeof s.output === 'boolean', output: s.output, power: s.apower, voltage: s.voltage }))
+          .catch(err => res.json({ ok: false, detail: err.message }))
       })
 
       router.post('/configuration/network/read', (_req, res) => {

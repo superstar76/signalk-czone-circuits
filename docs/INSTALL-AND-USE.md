@@ -64,7 +64,7 @@ Changes on this page are saved as you make them. There is no Save button; a gree
 ### 2.4 Check it is working
 
 1. Go to **Webapps → CZone Circuits**.
-2. The title shows your vessel's name and the corner shows **Connected**.
+2. The title shows your vessel's name and the corner shows **Connected**. It says Connected only while live updates are arriving; "Live updates lost · reconnecting…" means the page is showing circuits as they were at the time given.
 3. Circuits that are on show **ON** in green. Switch a light from the page and from a CZone display, and check each follows the other.
 
 If the list is empty, see section 10.
@@ -126,6 +126,7 @@ The **Monitoring** tab lists everything the CZone configuration monitors, groupe
 
 - **LIVE** means the value is arriving now.
 - **NOT ON BUS** means the configuration expects it but nothing is sending it. The row names the NMEA 2000 instance it is waiting for, for example "Nothing is sending instance 3 on NMEA 2000". Set that instance on the sending device and the row goes live. Tick **Show unmapped** to see these rows.
+- **Switch inputs** on a Signal Interface or a Combination Output Interface show ON or OFF as the switch is operated. Inputs on a Control X PLUS are listed but do not show a state yet.
 - **To open a trend**, press a value (that value's trend) or the arrow at the end of the row. The rest of the row does nothing, so a stray touch does not open a chart. The trend opens at the top of the page, from any tab.
 
 ## 5. Trends
@@ -231,6 +232,7 @@ All in **Server → Plugin Config → CZone Circuits**.
 | Trend folder | automatic | where trends are stored |
 | Trend sample rate | 10 seconds | 5, 10, 15, 30 or 60 seconds |
 | Keep full-detail trend data for | as long as there is space | or 31, 90 or 365 days |
+| Third-party switches | none | CZone circuits linked to a Victron output or a Shelly (section 12) |
 
 ## 9. Getting the most from the CZone configuration
 
@@ -268,6 +270,9 @@ A circuit appears when one of its Circuit Controls is a display (All Display Int
 | Switch pane shows no CZone switches | the setting is off, or Venus OS is older than 3.60 | section 6 |
 | Plotter shows no CZone Circuits tile | plotter and Signal K are on different networks, or the embedder is not enabled | section 7 |
 | Plotter tile opens but the list is empty | the embedder has no token | section 7, step 3 |
+| "Live updates lost · reconnecting…" stays | the page cannot keep a live connection to Signal K | reload the page; if it persists, restart Signal K |
+| A third-party switch link says "Not reachable" | the Shelly is off the network or its address changed | check its address; reserve it in the router |
+| A link says "the Shelly has a password set" | the Shelly asks for a login | turn its password off, or link it through the GX instead |
 
 For anything else, the diagnostic pages in Appendix B show what the plugin is seeing.
 
@@ -275,6 +280,34 @@ For anything else, the diagnostic pages in Appendix B show what the plugin is se
 
 - **A new version of the plugin:** from the Appstore once it is published; until then, Appendix A, "Updating". Settings, trends and the installed ZCF are kept either way.
 - **A changed CZone configuration:** upload the new ZCF (section 2.2).
+
+## 12. Switching a third-party switch from a CZone display
+
+A switch that is not on the CZone network (a Shelly, a GX relay, anything in the Victron switch pane) can be switched from a CZone display or keypad, and kept in step when it is switched from anywhere else.
+
+**In the CZone Configuration Tool:**
+
+1. Add a **virtual circuit** for the switch, named as it should appear (for example "Power Board"). It needs no output.
+2. Put it on the display (or a keypad button) like any other circuit.
+3. Write the configuration to the network, then upload the new ZCF to the plugin (section 2.2).
+
+**In Plugin Config → CZone Circuits → Third-party switches:**
+
+1. **CZone circuit:** choose the virtual circuit.
+2. **Linked to:** choose one of:
+   - **A Victron output (through the GX):** pick the output from the list. It lists everything in the GX switch pane by the names given on the GX. A Shelly must first be added to the GX (under Integrations in the GX settings). Press **Look again** if it was added after the page was opened.
+   - **A Shelly (directly, by IP address):** enter its address and channel (0 for a single-relay Shelly) and press **Test**. It should answer "Found: switch is ON" or "OFF". Reserve the address in the router so it does not change. Shelly Gen2 or later, with no password.
+3. Press **Link**. **Allow this plugin to send NMEA 2000 messages** must also be ticked (section 2.3), so that the CZone circuit can follow the switch.
+
+**What happens:**
+
+- Pressing the circuit on a CZone display switches the Shelly or output.
+- Switching the Shelly or output from anywhere else (its app or button, the Victron pane, VRM) switches the CZone circuit to match, so the display shows the truth.
+- When the plugin starts, the switch is taken as right and the CZone circuit set to match it.
+- Each link shows its state under Third-party switches: **in step (ON/OFF)**, **out of step**, or an error. A switch that cannot be reached is tried again every 15 seconds.
+- A linked circuit is left out of the plugin's own Victron switch pane, so the switch is not there twice.
+
+Which route to choose: through the GX if the switch is already on the GX and the plugin runs on the GX. Directly if there is no GX (a Pi), or the Shelly is not added to it.
 
 ## Appendix A. Installing from GitHub
 
@@ -326,3 +359,4 @@ Open these in a browser that is logged in to Signal K, after the address of the 
 | `/monitor/modules` | CZone modules and their NMEA 2000 addresses |
 | `/trend/status` | where trends are stored and how much space is free |
 | `/victron/status` | what the switch pane holds for each circuit |
+| `/bridge/status` | each third-party switch link: both sides, in step or not, last action, error |

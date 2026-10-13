@@ -344,7 +344,7 @@
   const mfdIcon = key => `<svg class="ico" viewBox="0 0 24 24">${MFD_ICONS[MFD_ICON_FOR[key]] || MFD_ICONS.dot}</svg>`;
   if (MFD) window.czoneMfdIcon = mfdIcon; // the Monitoring tab's group icons
   let circuits = [], status = {}, modes = [], activeMode = null, vesselName = '', view = 'all', category = null, query = '', sort = 'name', socket = null;
-  let socketReconnectTimer = null, watchdogTimer = null, lastSocketUpdateAt = 0, socketConnected = false;
+  let socketReconnectTimer = null, watchdogTimer = null, lastSocketUpdateAt = 0, socketConnected = false, socketEverOpen = false;
   const WS_WATCHDOG_MS = 120000;
   const COMMAND_CONFIRM_MS = 15000;
   const COMMAND_RECONCILE_DELAY_MS = 200;
@@ -691,8 +691,16 @@
       const data = await r.json();
       needLogin = false;
       mergeRest(data);
-      document.querySelector('#connection').classList.add('ok');
-      document.querySelector('#connection').innerHTML = '<i></i><span>Connected · live circuit data</span>';
+      // [fork] Only "Connected" while the live feed is up. This read is a
+      // one-off: with the live feed down the page would otherwise say
+      // Connected while nothing on it moves.
+      const conn = document.querySelector('#connection');
+      conn.classList.toggle('ok', socketConnected);
+      conn.innerHTML = socketConnected
+        ? '<i></i><span>Connected · live circuit data</span>'
+        : socketEverOpen
+          ? `<i></i><span>Live updates lost · reconnecting… (circuits as of ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })})</span>`
+          : '<i></i><span>Circuits loaded · connecting live updates…</span>';
       render();
       return true;
     } catch (e) {
@@ -995,6 +1003,7 @@
       socket = new WebSocket(SK);
       socket.onopen = () => {
         socketConnected = true;
+        socketEverOpen = true;
         lastSocketUpdateAt = Date.now();
         updateSocketIndicator('Connected · WebSocket live', true);
         sendSubscriptions();
@@ -1023,7 +1032,7 @@
       };
       socket.onclose = () => {
         socketConnected = false;
-        updateSocketIndicator('Reconnecting to Signal K…', false);
+        updateSocketIndicator(socketEverOpen ? 'Live updates lost · reconnecting…' : 'Connecting live updates…', false);
         console.warn('[CZone WS] closed; reconnecting');
         clearTimeout(socketReconnectTimer);
         socketReconnectTimer = setTimeout(connectSocket, 3000);

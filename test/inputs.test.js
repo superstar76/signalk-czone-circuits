@@ -4,7 +4,7 @@ const assert = require('assert')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { STATUS_PGN, decodeModuleStatus, inputState, knowsKind } = require('../lib/monitor/inputs')
+const { STATUS_PGN, INPUT_PGN, decodeModuleStatus, decodeInputMessage, inputState, knowsKind } = require('../lib/monitor/inputs')
 const { uniqueInputPaths } = require('../lib/monitor/catalog')
 const { createMonitor } = require('../lib/monitor')
 
@@ -207,6 +207,64 @@ function boot (fixture) {
   b.bus('1CFF0402 27 99 02 36 33 0E 01 00')
   assert.deepStrictEqual(b.deltas.filter(d => d[0].includes('.inputs.')), [])
   assert(b.inputs().every(i => !i.mapped && i.note === 'Input state is not decoded yet for this kind of module (0x36)'))
+  b.monitor.stop()
+}
+
+// --- COI (kind 0x1F): inputs in PGN 65308, numbered from 16. Frames from Matt
+//     Mitchell's Sugar Shack capture, 6 Oct 2026.
+{
+  assert.strictEqual(INPUT_PGN, 65308)
+  const bimini = decodeInputMessage(hex('27 99 1A 03 80 00 00 00')) // Bimini Lights Switch pressed (1A input 19)
+  const salon = decodeInputMessage(hex('27 99 1A 03 00 02 00 00')) // Salon Lights Switch pressed (1A input 20)
+  const gway = decodeInputMessage(hex('27 99 1C 03 08 00 00 00')) // Port Gway Lights Switch pressed (1C input 17)
+  assert.deepStrictEqual([bimini.module, salon.module, gway.module], [0x1a, 0x1a, 0x1c])
+  const at = (m, inputs) => inputs.map(i => inputState(0x1f, m.bitmap, i, INPUT_PGN))
+  assert.deepStrictEqual(at(bimini, [16, 17, 18, 19, 20]), [false, false, false, true, false])
+  assert.deepStrictEqual(at(salon, [16, 17, 18, 19, 20]), [false, false, false, false, true])
+  assert.deepStrictEqual(at(gway, [16, 17, 18]), [false, true, false])
+  // A COI's status message carries its outputs, not its inputs: never read as inputs.
+  assert.strictEqual(inputState(0x1f, 0xffffffff, 19, STATUS_PGN), undefined)
+  assert.strictEqual(inputState(0x1f, 0xffffffff, 15, INPUT_PGN), undefined) // below its first input
+  // A Signal Interface sends the same bitmap in 65308 (bench, 1CFF1C1B 27 99 02 00 ...).
+  assert.strictEqual(inputState(0x0d, decodeInputMessage(hex('27 99 02 00 02 00 00 00')).bitmap, 0, INPUT_PGN), true)
+  assert.strictEqual(decodeInputMessage(hex('27 99 1A 03 80 00 00')), null)
+  assert.strictEqual(knowsKind(0x1f), true)
+  // Recognised by CAN ID (the parser reports 0xFF1C as 130844): DP bit clear only.
+  const { isInputMessage } = require('../lib/monitor/inputs')
+  assert.deepStrictEqual(['1CFF1C06', '1CFF1C1B', '1DFF1C06', '1CFF0406', '1CFF1D06'].map(id => isInputMessage(parseInt(id, 16))), [true, true, false, false, false])
+
+  const b = boot('SugarShack-20260927-01.zcf')
+  const row = name => b.inputs().find(i => i.name === name)
+  const value = name => row(name).readings[0].value
+  assert(row('Bimini Lights Switch') && row('Port Gway Lights Switch'), 'COI inputs are in the catalogue')
+  assert.strictEqual(row('Bimini Lights Switch').note, 'No status message from module 0x1A yet')
+  // The COI's status message alone (outputs) leaves its inputs alone.
+  b.bus('1CFF0406 27 99 1A 1F 4C 2A 00 00')
+  assert.strictEqual(row('Bimini Lights Switch').mapped, false)
+  assert.strictEqual(row('Bimini Lights Switch').note, 'Module 0x1A is reporting, but not this input')
+  // Its input message: all open, then the Bimini switch pressed and released.
+  b.bus('1CFF1C06 27 99 1A 03 00 00 00 00')
+  assert.deepStrictEqual(['Master Cabin Lights Switch', 'Bimini Lights Switch', 'Salon Lights Switch'].map(value), [false, false, false])
+  b.bus('1CFF1C06 27 99 1A 03 80 00 00 00')
+  assert.deepStrictEqual(['Master Cabin Lights Switch', 'Bimini Lights Switch', 'Salon Lights Switch'].map(value), [false, true, false])
+  assert(b.deltas.some(d => /Bimini_Lights_Switch/.test(d[0]) && d[1] === true))
+  b.bus('1CFF1C06 27 99 1A 03 00 00 00 00')
+  assert.strictEqual(value('Bimini Lights Switch'), false)
+  // Another COI, heard only through its input message: the kind comes from the ZCF.
+  b.bus('1CFF1C07 27 99 1C 03 08 00 00 00')
+  assert.deepStrictEqual(['Port Fwd Cabin Light Switch', 'Port Gway Lights Switch', 'Port Macerator Pump Switch'].map(value), [false, true, false])
+  // Tank inputs on the same COI are not switches and are not touched.
+  assert(!b.inputs().some(i => /Water Tank|Fuel Tank/.test(i.name)))
+  b.monitor.stop()
+}
+
+// --- The bench Signal Interface through its 65308 message as well.
+{
+  const b = boot('TestBench-2026-10-01.zcf')
+  b.bus('1CFF1C1B 27 99 02 00 02 00 00 00')
+  assert.deepStrictEqual(b.inputs().map(i => i.readings[0].value), [true, false, false, false, false])
+  b.bus('1CFF041B 27 99 02 0D 00 00 00 00')
+  assert.deepStrictEqual(b.inputs().map(i => i.readings[0].value), [false, false, false, false, false])
   b.monitor.stop()
 }
 

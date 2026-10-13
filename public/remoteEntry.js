@@ -122,6 +122,63 @@ var signalk_czone_circuits = (function () {
       persist({ confirmOff: confirmOffList().filter(function (_e, i) { return i !== index }) })
     }
 
+    // [fork] Third-party switches (lib/bridge)
+    var bridgeKindState = React.useState('victron'); var bridgeKind = bridgeKindState[0]; var setBridgeKind = bridgeKindState[1]
+    var bridgeCircuitState = React.useState(''); var bridgeCircuit = bridgeCircuitState[0]; var setBridgeCircuit = bridgeCircuitState[1]
+    var bridgeOutputState = React.useState(''); var bridgeOutput = bridgeOutputState[0]; var setBridgeOutput = bridgeOutputState[1]
+    var bridgeHostState = React.useState(''); var bridgeHost = bridgeHostState[0]; var setBridgeHost = bridgeHostState[1]
+    var bridgeChannelState = React.useState('0'); var bridgeChannel = bridgeChannelState[0]; var setBridgeChannel = bridgeChannelState[1]
+    var outputsState = React.useState(null); var outputs = outputsState[0]; var setOutputs = outputsState[1]
+    var shellyTestState = React.useState(''); var shellyTest = shellyTestState[0]; var setShellyTest = shellyTestState[1]
+    var linkStatusState = React.useState([]); var linkStatus = linkStatusState[0]; var setLinkStatus = linkStatusState[1]
+
+    function bridgeList () {
+      return (Array.isArray(configuration.bridges) ? configuration.bridges : []).filter(function (b) { return b && b.circuit })
+    }
+    function loadOutputs () {
+      setOutputs({ loading: true, outputs: [] })
+      fetch('/plugins/signalk-czone-circuits/bridge/outputs', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json() })
+        .then(function (v) { setOutputs(v) })
+        .catch(function (err) { setOutputs({ available: false, outputs: [], detail: err.message }) })
+    }
+    function loadLinkStatus () {
+      fetch('/plugins/signalk-czone-circuits/bridge/status', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json() })
+        .then(function (v) { setLinkStatus(Array.isArray(v.links) ? v.links : []) })
+        .catch(function () {})
+    }
+    React.useEffect(function () {
+      loadOutputs(); loadLinkStatus()
+      var t = setInterval(loadLinkStatus, 3000)
+      return function () { clearInterval(t) }
+    }, [])
+    function testShelly () {
+      setShellyTest('Asking the Shelly…')
+      fetch('/plugins/signalk-czone-circuits/bridge/shelly?host=' + encodeURIComponent(bridgeHost.trim()) + '&channel=' + encodeURIComponent(bridgeChannel), { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json() })
+        .then(function (v) { setShellyTest(v.ok ? 'Found: switch is ' + (v.output ? 'ON' : 'OFF') + (typeof v.power === 'number' ? ' · ' + v.power + ' W' : '') : 'Not found: ' + (v.detail || 'no answer')) })
+        .catch(function (err) { setShellyTest('Not found: ' + err.message) })
+    }
+    function addBridge () {
+      var row
+      if (bridgeKind === 'victron') {
+        var o = (outputs && outputs.outputs || []).filter(function (x) { return x.value === bridgeOutput })[0]
+        if (!o) return
+        row = { circuit: bridgeCircuit, target: 'victron', output: o.value, label: o.label }
+      } else {
+        row = { circuit: bridgeCircuit, target: 'shelly', host: bridgeHost.trim(), channel: Number(bridgeChannel) || 0 }
+      }
+      persist({ bridges: bridgeList().concat([row]) })
+      setBridgeCircuit(''); setBridgeOutput(''); setShellyTest('')
+    }
+    function removeBridge (index) {
+      persist({ bridges: bridgeList().filter(function (_b, i) { return i !== index }) })
+    }
+    function bridgeTarget (b) {
+      return b.target === 'victron' ? (b.label || b.output) + ' (Victron output, through the GX)' : 'Shelly at ' + b.host + (b.channel ? ' channel ' + b.channel : '') + ' (directly)'
+    }
+
     function setTrendDirectory (value) {
       persist({ trendDirectory: String(value || '').trim() })
     }
@@ -338,6 +395,61 @@ var signalk_czone_circuits = (function () {
           ' Let the Victron switch pane and other apps turn these circuits off'
         ),
         React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'The Victron switch pane and other Signal K apps cannot ask "are you sure?". Unticked, an off from them is not acted on and the switch returns to on. The circuit can still be turned off from the webapp, a chartplotter or a CZone keypad.')
+      ),
+
+      React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
+        React.createElement('strong', null, 'Third-party switches'),
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Switch something that is not on the CZone network from a CZone display or keypad: a Shelly, or any output in the Victron switch pane. In the CZone configuration add a virtual circuit for it and put it on the display, then link that circuit here. The switch follows the CZone circuit, and the circuit follows the switch when it is switched from anywhere else. Switching the CZone circuit back needs NMEA 2000 sending allowed above.'),
+        bridgeList().map(function (b, i) {
+          var st = linkStatus.filter(function (l) { return l.circuit === b.circuit })[0]
+          var state = !st ? '' : st.error ? ' · ' + st.error : st.inStep === true ? ' · in step (' + (st.device ? 'ON' : 'OFF') + ')' : st.inStep === false ? ' · out of step' : ' · waiting for both sides'
+          return React.createElement('div', { key: b.circuit + ':' + i, style: { marginTop: 8 } },
+            React.createElement('span', { style: { fontWeight: 600 } }, b.circuit),
+            React.createElement('span', null, ' \u2194 ' + bridgeTarget(b)),
+            React.createElement('span', { style: { fontSize: 12, color: st && st.error ? '#b00' : '#555' } }, state + ' '),
+            React.createElement('button', { type: 'button', disabled: busy, onClick: function () { removeBridge(i) } }, 'Remove')
+          )
+        }),
+        React.createElement('div', { style: { marginTop: 12 } },
+          React.createElement('label', null, 'CZone circuit ',
+            React.createElement('select', { value: bridgeCircuit, disabled: busy, onChange: function (e) { setBridgeCircuit(e.target.value) } },
+              [React.createElement('option', { key: '', value: '' }, data && Array.isArray(data.allCircuitNames) && data.allCircuitNames.length ? 'Choose a circuit' : 'Load a CZone configuration first')].concat(
+                (data && Array.isArray(data.allCircuitNames) ? data.allCircuitNames : [])
+                  .filter(function (n) { return !bridgeList().some(function (b) { return b.circuit === n }) })
+                  .map(function (n) { return React.createElement('option', { key: n, value: n }, n) })
+              )
+            )
+          ),
+          React.createElement('label', { style: { marginLeft: 12 } }, 'linked to ',
+            React.createElement('select', { value: bridgeKind, disabled: busy, onChange: function (e) { setBridgeKind(e.target.value) } },
+              React.createElement('option', { value: 'victron' }, 'a Victron output (through the GX)'),
+              React.createElement('option', { value: 'shelly' }, 'a Shelly (directly, by IP address)')
+            )
+          )
+        ),
+        bridgeKind === 'victron'
+          ? React.createElement('div', { style: { marginTop: 8 } },
+              React.createElement('select', { value: bridgeOutput, disabled: busy || !outputs || outputs.loading || !(outputs.outputs || []).length, onChange: function (e) { setBridgeOutput(e.target.value) } },
+                [React.createElement('option', { key: '', value: '' }, !outputs || outputs.loading ? 'Looking for Victron outputs…' : (outputs.outputs || []).length ? 'Choose an output' : (outputs.detail || 'No switchable outputs found on the GX'))].concat(
+                  (outputs && outputs.outputs ? outputs.outputs : []).map(function (o) { return React.createElement('option', { key: o.value, value: o.value }, o.label) })
+                )
+              ),
+              React.createElement('button', { type: 'button', style: { marginLeft: 8 }, disabled: busy, onClick: loadOutputs }, 'Look again')
+            )
+          : React.createElement('div', { style: { marginTop: 8 } },
+              React.createElement('label', null, 'IP address ',
+                React.createElement('input', { type: 'text', value: bridgeHost, placeholder: '192.168.1.204', disabled: busy, onChange: function (e) { setBridgeHost(e.target.value); setShellyTest('') }, style: { width: 140 } })
+              ),
+              React.createElement('label', { style: { marginLeft: 10 } }, 'channel ',
+                React.createElement('input', { type: 'number', min: 0, value: bridgeChannel, disabled: busy, onChange: function (e) { setBridgeChannel(e.target.value) }, style: { width: 50 } })
+              ),
+              React.createElement('button', { type: 'button', style: { marginLeft: 8 }, disabled: busy || !bridgeHost.trim(), onClick: testShelly }, 'Test'),
+              shellyTest ? React.createElement('span', { style: { marginLeft: 8, fontSize: 12 } }, shellyTest) : null,
+              React.createElement('div', { style: { marginTop: 4, fontSize: 12 } }, 'Shelly Gen2 or later, with no password. Reserve its address in the router so it does not change.')
+            ),
+        React.createElement('div', { style: { marginTop: 8 } },
+          React.createElement('button', { type: 'button', disabled: busy || !bridgeCircuit || (bridgeKind === 'victron' ? !bridgeOutput : !bridgeHost.trim()), onClick: addBridge }, 'Link')
+        )
       ),
 
       React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
