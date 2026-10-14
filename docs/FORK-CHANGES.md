@@ -264,6 +264,7 @@ All under `/plugins/signalk-czone-circuits`.
 
 | Fault | Cause | Fix |
 |---|---|---|
+| Meitaki's October 2026 file: no inputs or tanks found | A newer Configuration Tool writes input records 6 bytes shorter (no `00 00 00 00 ff ff` before the name), so the calibration count was missed and the table walk failed | The count is read from its place in the shorter layout too; all 51 inputs and 6 tanks found |
 | "Connected" with the live feed down | The line was set by any successful read of the circuit list | Connected only while the live feed is up; otherwise says what is happening |
 | COI inputs never changed (SugarShack) | A COI sends inputs only in PGN 65308, which Signal K's parser reports under another number | Recognised by CAN identifier; COI layout added |
 | Every circuit off, only ON could be sent (Compass Rose) | ZCF has no status table | State from module and channel |
@@ -377,6 +378,7 @@ The chartplotter view adds a second plugin, `signalk-navico-embedder`, which con
 - **Matt's beta.22 restructure is not merged.** A clean-up pass of the fork is planned with that merge: one source of state for the pane, one way of choosing a sender, and the monitor's main file split up.
 - **Our own copy of the circuit parser.** `lib/zcf-circuits.js` is Matt's structural parser plus the hidden-duplicate rule. Once his has the rule, ours can go.
 - **Control X PLUS inputs wired to negative** are read one bit above their number, from a single example (Compass Rose's bilge float). A second input to negative on another boat would confirm it.
+- **Newer Configuration Tool files (Meitaki, October 2026):** the status table's records are one byte longer than before, and neither this fork nor Matt's parser finds the table. State then comes from each module's outputs (the fallback used on boats with no status table), which is right for a circuit with one output; a circuit driving several outputs is less certain. To be fixed.
 - **Third-party switches:** a Shelly with a password is not supported yet (digest login). A Shelly Gen1 is not supported. Dimmers and other non-on/off outputs are not linked, only on and off.
 - **Per-display permissions** are not respected: a circuit that only one display may switch off can be switched off from the webapp and the pane. Confirm before turning off (section 1.9) covers the common case by hand: the installer nominates the circuits.
 - **Pane order** is alphabetical; Victron has no setting for it.

@@ -248,3 +248,15 @@ for (const file of fs.readdirSync(fixtures).filter(f => f.endsWith('.zcf'))) {
 }
 
 console.log('ZCF structural circuit table tests passed')
+
+// Meitaki again, Clive's configuration of 15 Oct 2026: his Configuration Tool
+// lists 130 entries (123 circuits and 7 modes) and one "Audible Alarm"; the
+// two internal copies (0x01, 0x02, no controls, same output) are still stored.
+{
+  const buf = fs.readFileSync(path.join(__dirname, 'fixtures', 'Meitaki-2026-10-15.zcf'))
+  const circuits = parseCircuits(buf)
+  assert.deepStrictEqual([circuits.length, parseModes(buf).length], [123, 7])
+  assert.deepStrictEqual(circuits.filter(c => c.name === 'Audible Alarm').map(c => c.id), [0x20])
+  assert.deepStrictEqual(parseCircuitTable(buf).records.filter(r => r.kind === 'internal').map(r => [r.name, r.id]), [['Audible Alarm', 0x01], ['Audible Alarm', 0x02]])
+  console.log('Meitaki (October 2026) circuit list matches the Configuration Tool')
+}
