@@ -274,3 +274,27 @@ function run (fixture) {
 }
 
 console.log('Fork mapping tests passed')
+
+// --- Meitaki, Clive's configuration of 15 Oct 2026 (newer Configuration Tool):
+//     the status table's 18-byte record headers are read, and the two internal
+//     "Audible Alarm" copies are dropped so the real one keeps the plain path.
+{
+  const zcf = require('../lib/zcf')
+  const { prepareMapping } = require('../lib/fork-mapping')
+  const fx = name => require('path').join(__dirname, 'fixtures', name)
+  for (const [file, statusRecords] of [['Meitaki-07.04.25.zcf', 47], ['Meitaki-2026-10-15.zcf', 52]]) {
+    const m = zcf.load(fx(file))
+    const r = prepareMapping(m, {})
+    const alarms = m.circuits.filter(c => c.name === 'Audible Alarm')
+    assert.strictEqual(r.internalCopies, 2, file)
+    assert.deepStrictEqual(alarms.map(c => [c.slug, c.signalK.state, !!c.hidden]), [['Audible_Alarm', 'electrical.czone.Audible_Alarm.switch.state', false]], file)
+    assert.strictEqual(m.circuits.filter(c => c.zcf.statusRecord).length, statusRecords, file)
+    assert.strictEqual(r.inferredState, 0, `${file}: state from the status table, not the fallback`)
+    assert(!m.warnings.some(w => /Duplicate circuit names/.test(w)), file)
+  }
+  // A zero-control circuit with a name of its own stays (SugarShack solar chargers).
+  const ss = zcf.load(fx('SugarShack-20260927-01.zcf'))
+  assert.strictEqual(prepareMapping(ss, {}).internalCopies, 0)
+  assert(ss.circuits.some(c => c.name === 'Solar Port Charger CHG'))
+  console.log('Meitaki status table and internal copies: tests passed')
+}

@@ -303,7 +303,8 @@ A switch that is not on the CZone network (a Shelly, a GX relay, anything in the
 
 - Pressing the circuit on a CZone display switches the Shelly or output.
 - Switching the Shelly or output from anywhere else (its app or button, the Victron pane, VRM) switches the CZone circuit to match, so the display shows the truth.
-- When the plugin starts, the switch is taken as right and the CZone circuit set to match it.
+- When the plugin starts, nothing is switched. If the two sides differ (for example a GX relay that came back off after a reboot), the link shows **out of step** until either side is switched.
+- A circuit set to ask before turning off (section 3.5) is never turned off by a link; the link says so.
 - Each link shows its state under Third-party switches: **in step (ON/OFF)**, **out of step**, or an error. A switch that cannot be reached is tried again every 15 seconds.
 - A linked circuit is left out of the plugin's own Victron switch pane, so the switch is not there twice.
 

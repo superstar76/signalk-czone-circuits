@@ -93,25 +93,73 @@ function rig ({ device = false, circuit = false, sending = true } = {}) {
     r.bridge.stop()
   }
 
-  // --- Out of step at start: the switch is taken as right.
+  // --- Out of step at start: nothing is switched either way (a GX relay
+  //     comes back off after a reboot; taking it as right turned Instruments
+  //     off on Compass Rose). The next real change on either side syncs.
+  {
+    const r = rig({ device: false, circuit: true }) // e.g. Instruments on, relay just rebooted off
+    for (let i = 0; i < 4; i++) { r.later(RETRY_MS + 1); await r.poll() }
+    assert.deepStrictEqual([r.dev.writes, r.cz.writes], [[], []])
+    assert.deepStrictEqual([r.bridge.status()[0].inStep, r.bridge.status()[0].czone, r.bridge.status()[0].device], [false, true, false])
+    assert.match(r.bridge.status()[0].last, /Out of step at start: nothing switched/)
+    await r.press(false) // the circuit switched on a display: the switch follows
+    await r.press(true)
+    r.later(2000); await r.poll()
+    assert.deepStrictEqual([r.dev.writes, r.cz.writes, r.bridge.status()[0].inStep], [[true], [], true])
+    r.bridge.stop()
+  }
   {
     const r = rig({ device: false, circuit: true })
     await r.poll()
-    assert.deepStrictEqual([r.dev.writes, r.cz.writes], [[], [false]])
-    assert.match(r.bridge.status()[0].last, /Out of step at start/)
+    r.dev.on = true; r.later(2000); await r.poll() // the switch changed elsewhere: still in step after
+    r.dev.on = false; r.later(2000); await r.poll() // ...and switched off elsewhere: the circuit follows
+    assert.deepStrictEqual([r.dev.writes, r.cz.writes, r.bridge.status()[0].inStep], [[], [false], true])
     r.bridge.stop()
   }
 
-  // --- The circuit first seen after the switch, and different: it is set to
-  //     the switch's state.
+  // --- The circuit first seen after the switch, and different: nothing is
+  //     switched either.
   {
     const r = rig({ circuit: null, device: true })
     await r.poll()
     r.cz.on = false
     r.bridge.onCircuit('Pump', false)
     await tick(); await tick()
-    assert.deepStrictEqual([r.dev.writes, r.cz.writes], [[], [true]])
+    assert.deepStrictEqual([r.dev.writes, r.cz.writes], [[], []])
+    assert.match(r.bridge.status()[0].last, /Out of step at start/)
     r.bridge.stop()
+  }
+
+  // --- The host refuses for good (a circuit that asks before turning off):
+  //     said once, never retried; turning it on still works.
+  {
+    let refusals = 0
+    const r = rig({ device: true, circuit: true })
+    const real = r.bridge
+    r.bridge.stop()
+    let clock = 5000
+    const cz = { on: true, writes: [] }
+    const dev = { on: true, writes: [] }
+    const b = createBridge({
+      readCircuit: () => cz.on,
+      writeCircuit: (_n, on) => {
+        if (!on) { refusals++; const e = new Error('not switched off: this circuit asks before turning off'); e.permanent = true; throw e }
+        cz.writes.push(on); cz.on = on
+      },
+      drivers: { test: { read: async () => dev.on, write: async (_e, on) => { dev.writes.push(on); dev.on = on } } },
+      now: () => clock,
+      pollMs: 1e9
+    })
+    b.start([{ circuit: 'Instruments', target: 'test' }])
+    await b.poll()
+    dev.on = false; clock += 2000; await b.poll() // relay switched off elsewhere
+    for (let i = 0; i < 4; i++) { clock += RETRY_MS + 1; await b.poll() }
+    assert.deepStrictEqual([refusals, cz.on, cz.writes], [1, true, []])
+    assert.match(b.status()[0].error, /not switched off: this circuit asks before turning off/)
+    dev.on = true; clock += 2000; await b.poll() // back on elsewhere: in step again, nothing sent
+    assert.deepStrictEqual([b.status()[0].inStep, cz.writes, refusals], [true, [], 1])
+    b.stop()
+    void real
   }
 
   // --- A switch that accepts the command but does not change: after a while
@@ -385,6 +433,49 @@ function rig ({ device = false, circuit = false, sending = true } = {}) {
     const st = linkStatus()
     assert.deepStrictEqual([st.circuit, st.czone, st.device, st.inStep], ['Shelly Relay - Powerboard', false, false, true])
     assert.deepStrictEqual(shelly.sets, [true]) // not sent back
+    plugin.stop()
+  }
+
+  // --- The same, with the circuit nominated to confirm before off (as
+  //     Instruments is on Compass Rose), and out of step at start.
+  {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'czone-bridge-'))
+    const dataDir = path.join(dir, 'plugin-config-data', 'signalk-czone-circuits')
+    fs.mkdirSync(dataDir, { recursive: true })
+    fs.copyFileSync(path.join(__dirname, 'fixtures', 'TestBench-Shelly-2026-10-13.zcf'), path.join(dataDir, 'installation.zcf'))
+    const listeners = new Map()
+    const out = []
+    const app = {
+      config: { configPath: dir },
+      debug () {}, error () {}, setPluginStatus () {}, setPluginError () {},
+      on: (e, fn) => listeners.set(e, fn), removeListener: e => listeners.delete(e),
+      emit: (e, line) => { if (e === 'nmea2000out') out.push(line) },
+      handleMessage () {}, registerPutHandler () {},
+      isNmea2000OutAvailable: true,
+      getSelfPath: () => undefined
+    }
+    const plugin = require('../index')(app)
+    shelly.output = false; shelly.sets = []
+    plugin.start({ enableSending: true, confirmOff: ['Shelly Relay - Powerboard'], bridges: [{ circuit: 'Shelly Relay - Powerboard', target: 'shelly', host }] })
+    const bus = frame => listeners.get('canboatjs:rawoutput')(`2026-10-13T05:00:00.000Z R ${frame}`)
+    const routes = {}
+    plugin.registerWithRouter({ get: (p, fn) => { routes[p] = fn }, post () {} })
+    const linkStatus = () => { let v; routes['/bridge/status']({}, { json: x => { v = x } }); return v.links[0] }
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
+    const offFrames = () => out.map(l => l.split(',').slice(6).join(' ').toUpperCase()).filter(f => /^27 99 0B 00 00 \w\w F2 08$/.test(f))
+
+    // Out of step at start: circuit on, Shelly off (as a relay after a reboot). Nothing is switched.
+    bus('1CFF0401 27 99 01 0F 40 00 00 00')
+    await wait(150)
+    await plugin._bridgePoll(); await plugin._bridgePoll()
+    assert.deepStrictEqual([out, shelly.sets], [[], []])
+    assert.deepStrictEqual([linkStatus().inStep, linkStatus().czone, linkStatus().device], [false, true, false])
+    // Shelly on, then off, elsewhere: the circuit is never turned off; the link says why.
+    shelly.output = true; await plugin._bridgePoll()
+    shelly.output = false; await plugin._bridgePoll()
+    await plugin._bridgePoll()
+    assert.deepStrictEqual(offFrames(), [])
+    assert.match(linkStatus().error, /not switched off: this circuit asks before turning off/)
     plugin.stop()
   }
 
