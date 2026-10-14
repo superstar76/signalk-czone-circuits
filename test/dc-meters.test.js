@@ -76,7 +76,7 @@ function start (fixtureName) {
   const zcfFile = path.join(dir, 'installation.zcf')
   fs.copyFileSync(fixture(fixtureName), zcfFile)
   const monitor = createMonitor({ getSelfPath: () => undefined, debug: () => {} })
-  monitor.start({ trendDirectory: path.join(dir, 'trends'), monitorWire: false }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends'), monitorWire: false }, zcfFile)
   const routes = {}
   monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
   const call = p => { let out; routes[p]({ query: {} }, { json: v => { out = v } }); return out }

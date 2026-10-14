@@ -136,6 +136,7 @@
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = await r.json()
       items = Array.isArray(data.items) ? data.items : []
+      trendsOn = data.trendsEnabled === true
       if (visible) render()
       if (typeof window.czoneMonitorReady === 'function') window.czoneMonitorReady()
     } catch (e) {
@@ -243,7 +244,10 @@
   const primary = item => item.readings.find(r => r.path) || item.readings[0]
   // Where a reading's trend is stored: its live series, or the one it was last
   // recorded under (a sensor that is switched off still has a history).
-  const trendKey = r => r.series || r.history || null
+  // [fork] Trends are off unless ticked in the settings; then no value or
+  // arrow opens a chart.
+  let trendsOn = false
+  const trendKey = r => (trendsOn ? (r.series || r.history || null) : null)
   const trendable = item => { const live = item.readings.filter(r => r.series); return live.length ? live : item.readings.filter(r => r.history) }
   const sortByName = (a, b) => a.name.localeCompare(b.name)
 
@@ -262,8 +266,8 @@
     // [fork] A value box opens that value's trend, and so does the arrow at
     // the end of the row. The rest of the row does not (a touch anywhere on
     // it used to, by accident).
-    const attrs = r.series ? `data-item="${esc(item.id)}" data-key="${esc(r.key)}" title="${esc(r.label)}: show trend"` : `title="${esc(r.label)}"`
-    return `<div class="mon-value ${on} ${isOn ? 'is-on' : ''} ${r.series ? 'clickable' : ''}" ${attrs}><span>${f.text}<small>${esc(f.unit)}</small></span>${level}</div>`
+    const attrs = r.series && trendsOn ? `data-item="${esc(item.id)}" data-key="${esc(r.key)}" title="${esc(r.label)}: show trend"` : `title="${esc(r.label)}"`
+    return `<div class="mon-value ${on} ${isOn ? 'is-on' : ''} ${r.series && trendsOn ? 'clickable' : ''}" ${attrs}><span>${f.text}<small>${esc(f.unit)}</small></span>${level}</div>`
   }
 
   function row (item) {

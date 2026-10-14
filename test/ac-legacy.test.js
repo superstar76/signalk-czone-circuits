@@ -78,7 +78,7 @@ const hex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join(' ')
   const zcfFile = path.join(dir, 'installation.zcf')
   fs.copyFileSync(path.join(__dirname, 'fixtures', 'Compass-Rose-28.06.26.zcf'), zcfFile)
   const monitor = createMonitor({ getSelfPath: () => undefined, debug: () => {} })
-  monitor.start({ trendDirectory: path.join(dir, 'trends'), monitorWire: false }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends'), monitorWire: false }, zcfFile)
   const routes = {}
   monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
   const call = p => { let out; routes[p]({ query: {} }, { json: v => { out = v } }); return out }
@@ -108,7 +108,7 @@ const hex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join(' ')
   const zcfFile = path.join(dir, 'installation.zcf')
   fs.copyFileSync(path.join(__dirname, 'fixtures', 'Compass-Rose-28.06.26.zcf'), zcfFile)
   const monitor = createMonitor({ getSelfPath: () => undefined, debug: () => {} })
-  monitor.start({ trendDirectory: path.join(dir, 'trends'), monitorWire: false }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends'), monitorWire: false }, zcfFile)
   const routes = {}
   monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
   monitor.onRawFrame('0 R 19F3032E 01 00 FA 08 FF FF EA 01')

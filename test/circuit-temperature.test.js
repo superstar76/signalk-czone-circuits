@@ -77,7 +77,7 @@ const fixture = name => path.join(__dirname, 'fixtures', name)
   fs.copyFileSync(fixture('Compass-Rose-03.10.26.zcf'), zcfFile)
   const published = []
   const monitor = createMonitor({ getSelfPath: () => undefined, debug: () => {}, handleMessage: (_id, d) => published.push(...d.updates[0].values) })
-  monitor.start({ trendDirectory: path.join(dir, 'trends'), monitorWire: false }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends'), monitorWire: false }, zcfFile)
   const frame = (instance, source, kelvin) => { const b = Buffer.from([0xff, instance, source, 0, 0, 0xff, 0xff, 0xff]); b.writeUInt16LE(Math.round(kelvin * 100), 3); return `0 R 19FD0865 ${[...b].map(x => x.toString(16).padStart(2, '0')).join(' ')}` }
   const items = buildCatalog(fs.readFileSync(zcfFile)).items
   const sender = name => { const i = items.find(x => x.name === name); const [, instance, source] = /^temperature:(\d+):(\d+)$/.exec(i.readings[0].bus); return [Number(instance), Number(source)] }

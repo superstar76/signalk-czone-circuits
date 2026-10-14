@@ -1026,6 +1026,12 @@ module.exports = function (app) {
           default: '',
           description: 'Used when Configuration source is set to Saved network configuration. Use the CZone Circuits configuration panel to read a new configuration from the network.'
         },
+        trendsEnabled: {
+          type: 'boolean',
+          title: 'Record trends',
+          default: false,
+          description: 'Off by default. Keeps a history of every monitored value and circuit current, for the trend charts. On a Victron GX it needs an SD card or USB stick. Not needed if the data already goes to a database such as InfluxDB.'
+        },
         trendDirectory: {
           type: 'string',
           title: 'Trend folder (optional)',
@@ -1252,6 +1258,7 @@ module.exports = function (app) {
       router.get('/circuits', (_req, res) => {
         res.json({
           sendingEnabled: settings.enableSending === true,
+          trendsEnabled: settings.trendsEnabled === true,
           nmeaReady,
           nmeaReadyAt,
           lastNmeaOutput,

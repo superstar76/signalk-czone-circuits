@@ -293,7 +293,7 @@ function writeFebruary (folder, value) {
   const zcfFile = path.join(dir, 'installation.zcf')
   fs.copyFileSync(path.join(__dirname, 'fixtures', 'TestBench.zcf'), zcfFile)
   const monitor = createMonitor({ getSelfPath: () => undefined, debug: () => {} })
-  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends') }, zcfFile)
   const routes = {}
   monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
   const call = (p, query = {}) => { let out; routes[p]({ query }, { json: v => { out = v } }); return out }
@@ -309,6 +309,39 @@ function writeFebruary (folder, value) {
   monitor.stop()
 }
 
+// --- Trends off unless ticked (as in Matt's plugin): live values as usual,
+//     but no trend store, nothing written even with a folder given, no
+//     timers for sampling, and the page is told so.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mon-'))
+  const zcfFile = path.join(dir, 'installation.zcf')
+  fs.copyFileSync(path.join(__dirname, 'fixtures', 'Compass-Rose-28.06.26.zcf'), zcfFile)
+  const sk = { 'electrical.batteries.0.voltage': { value: 13.2 } }
+  const real = { setInterval: global.setInterval, setTimeout: global.setTimeout }
+  const armed = []
+  global.setInterval = (fn, ms) => { armed.push(ms); return real.setInterval(() => {}, 1e9) }
+  global.setTimeout = (fn, ms) => { armed.push(ms); return real.setTimeout(() => {}, 1e9) }
+  let monitor
+  try {
+    monitor = createMonitor({ getSelfPath: p => sk[p], debug: () => {} })
+    monitor.start({ trendDirectory: path.join(dir, 'trends'), trendSampleSeconds: 10 }, zcfFile)
+  } finally { Object.assign(global, real) }
+  assert(!armed.includes(10000) && !armed.includes(60e3) && !armed.includes(3600e3), `no trend timers: ${armed}`)
+  const routes = {}
+  monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
+  const call = (p, query = {}) => { let out; routes[p]({ query }, { json: v => { out = v } }); return out }
+  monitor.sample()
+  assert.strictEqual(monitor.getStore(), null)
+  assert.deepStrictEqual([call('/trend/status').available, call('/trend/status').reason, call('/trend/status').enabled], [false, 'disabled', false])
+  assert.strictEqual(call('/trend', { path: 'electrical.batteries.0.voltage' }).reason, 'disabled')
+  const items = call('/monitor/items')
+  assert.strictEqual(items.trendsEnabled, false)
+  assert(items.items.some(i => i.mapped)) // live values still work
+  assert.strictEqual(monitor.backfillTrends().state, 'off')
+  monitor.stop()
+  assert.strictEqual(fs.existsSync(path.join(dir, 'trends')), false)
+}
+
 // --- End to end: fake Signal K, monitor samples and serves routes.
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mon-'))
@@ -317,7 +350,7 @@ function writeFebruary (folder, value) {
   const sk = { 'electrical.batteries.0.voltage': { value: 13.2 }, 'tanks.fuel.0.currentLevel': { value: 0.42 } }
   const app = { getSelfPath: p => sk[p], debug: () => {} }
   const monitor = createMonitor(app)
-  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends') }, zcfFile)
   monitor.sample()
   const routes = {}
   monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
@@ -381,9 +414,9 @@ function writeFebruary (folder, value) {
     assert.strictEqual(call('/trend', { path: 'x', from: '5', to: '1' }).error, 'bad_range')
   }
   monitor.stop()
-  monitor.start({ trendDirectory: path.join(dir, 'trends'), trendSampleSeconds: 30 }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends'), trendSampleSeconds: 30 }, zcfFile)
   assert.strictEqual(call('/trend/status').sampleSeconds, 30)
-  monitor.start({ trendDirectory: path.join(dir, 'trends'), trendSampleSeconds: 7 }, zcfFile) // not offered: default
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends'), trendSampleSeconds: 7 }, zcfFile) // not offered: default
   assert.strictEqual(call('/trend/status').sampleSeconds, 10)
   monitor.stop()
   assert(fs.readdirSync(path.join(dir, 'trends')).includes('tanks.fuel.0.currentLevel'))
@@ -402,7 +435,7 @@ function writeFebruary (folder, value) {
     }
   }
   const monitor = createMonitor({ getSelfPath: p => sk[p], debug: () => {} })
-  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends') }, zcfFile)
   const routes = {}
   monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
   const call = p => { let out; routes[p]({ query: {} }, { json: v => { out = v } }); return out }
@@ -430,7 +463,7 @@ function writeFebruary (folder, value) {
     debug: () => {}
   }
   const monitor = createMonitor(app)
-  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends') }, zcfFile)
   monitor.learnModuleSource('10:00:00.000 R 1CFF0409 27 99 04 0E 00 00 00 00')
   emit({ path: 'electrical.batteries.0.voltage', value: 11.93, $source: 'n2k-on-ve.can-socket.224' })
   emit({ path: 'electrical.batteries.0.voltage', value: 11.84, $source: 'n2k-on-ve.can-socket.9' })
@@ -467,7 +500,7 @@ function writeFebruary (folder, value) {
   const published = []
   const app = { handleMessage: (id, delta) => published.push(...delta.updates[0].values), debug: () => {} }
   const monitor = createMonitor(app)
-  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends') }, zcfFile)
   // Fast packet as canboatjs raw lines: 1DFF0614 = PGN 130822 from source 0x14.
   const payload = Buffer.from(hex.slice(0, 50) + '1fe807', 'hex')
   const frames = [Buffer.concat([Buffer.from([0x40, 28]), payload.subarray(0, 6)])]
@@ -504,7 +537,7 @@ function writeFebruary (folder, value) {
     'electrical.batteries.1.voltage': { value: 5.02, $source: 'n2k-on-ve.can-socket.9' }
   }
   const monitor = createMonitor({ getSelfPath: p => sk[p], debug: () => {} })
-  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends') }, zcfFile)
   monitor.learnModuleSource('10:00:00.000 R 1CFF0409 27 99 04 0E 00 00 00 00')
   // 130312 (0x1FD08) from 0xE0: SID 0, instance 102, source 2, 295.15 K
   monitor.onRawFrame('10:00:01.000 R 15FD08E0 00 66 02 4B 73 FF FF FF')
@@ -555,7 +588,7 @@ function writeFebruary (folder, value) {
   const oldPath = process.env.PATH
   process.env.PATH = `${bin}:${oldPath}`
   const monitor = createMonitor({ getSelfPath: () => undefined, debug: () => {} })
-  monitor.start({ trendDirectory: path.join(dir, 'trends') }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends') }, zcfFile)
   process.env.PATH = oldPath
   const routes = {}
   monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })

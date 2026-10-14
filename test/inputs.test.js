@@ -71,7 +71,7 @@ function boot (fixture) {
     debug: () => {}
   }
   const monitor = createMonitor(app)
-  monitor.start({ trendDirectory: path.join(dir, 'trends'), monitorWire: false }, zcfFile)
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends'), monitorWire: false }, zcfFile)
   const routes = {}
   monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
   const call = (route, query = {}) => { let out; routes[route]({ query }, { json: v => { out = v }, status () { return this } }); return out }

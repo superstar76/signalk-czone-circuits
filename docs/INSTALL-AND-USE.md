@@ -131,7 +131,7 @@ The **Monitoring** tab lists everything the CZone configuration monitors, groupe
 
 ## 5. Trends
 
-Trends record every live monitored value and every circuit's current, and draw them as charts.
+Trends record every live monitored value and every circuit's current, and draw them as charts. They are **off unless ticked**: tick **Record trends** in **Plugin Config → CZone Circuits**. Leave them off if the boat's data already goes to a database such as InfluxDB.
 
 ### 5.1 Where trends are kept
 
@@ -229,6 +229,7 @@ All in **Server → Plugin Config → CZone Circuits**.
 | Show CZone circuits in the Victron switch pane | off | adds the circuits to the GX switch pane and VRM |
 | Show circuit current in the switch label | on | "Light 1 (1.5 A)" |
 | Show temperature in the switch label | on | "Freezer (-8.2 °C, 2.9 A)" |
+| Record trends | off | keeps the history for the trend charts |
 | Trend folder | automatic | where trends are stored |
 | Trend sample rate | 10 seconds | 5, 10, 15, 30 or 60 seconds |
 | Keep full-detail trend data for | as long as there is space | or 31, 90 or 365 days |

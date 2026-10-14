@@ -1,10 +1,10 @@
 # signalk-czone-circuits: the monitoring fork
 
-What the fork adds to Matt Mitchell's plugin and what it changes, as of 13 October 2026.
+What the fork adds to Matt Mitchell's plugin and what it changes, as of 15 October 2026.
 
 **Fork:** `github.com/superstar76/signalk-czone-circuits`, branch `monitoring`
 **Based on:** Matt Mitchell's `signalk-czone-circuits`, `main` at `45c47d1` (beta.20), merged in with no conflicts. His beta.22 restructure is not merged yet.
-**State:** 13 October 2026
+**State:** 15 October 2026. Matt's plugin is on npm (0.3.0-beta.9); trends are with him as #23, the parser fixes as signalk-czone-zcf #13.
 **Run on:** the CZone test bench and Compass Rose, both on a Cerbo GX with Venus OS 3.80 and Signal K 2.27, and both reachable remotely over Tailscale
 **Size:** about 4,300 lines of new code in 15 new files (and two small shell scripts), 2,000 lines of new tests in 10 new test files, and about 430 lines added to four of Matt's files
 
@@ -49,6 +49,7 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
 
 ### 1.2 Trends
 
+- **Off unless ticked:** under **Record trends** in the settings, as in Matt's plugin (#23). Off, nothing is sampled or written and no card is touched; live values are unchanged, and the values and arrows do not open charts. Many boats already send their data to a database (InfluxDB with Grafana).
 - **What is recorded:** every live monitored value and every circuit's current.
 - **Sampling:** every 10 seconds by default (setting: 5, 10, 15, 30 or 60 s), buffered and written once a minute.
 - **Files:** plain CSV, no database, in two tiers per value:
@@ -225,6 +226,7 @@ These are in the brief for Matt, with evidence, for his parser.
 | Show circuits that are not on any CZone display | off |
 | Confirm before turning off (a list of circuits) | empty |
 | Let the Victron switch pane and other apps turn those circuits off | off |
+| Record trends | off |
 | Trend folder | automatic |
 | Trend sample rate | 10 seconds |
 | Keep full-detail trend data for | as long as there is space |
@@ -362,10 +364,12 @@ The webapp pages are not covered by `npm test`. They were checked by hand in a c
 | Confirm before turning off | not installed | yes in the webapp and the switch pane; plotter not yet |
 | Switch inputs, Signal Interface | yes (65284 and 65308) | does not apply |
 | Switch inputs, COI | no COI; decoded from Matt's SugarShack capture | does not apply |
-| Switch inputs, Control X PLUS | does not apply | decoded from a capture on the boat (15 October); fork build with it not yet installed |
+| Switch inputs, Control X PLUS | does not apply | yes (15 October): Anchor Up, Ignition, bilge float |
 | Connection line | not yet confirmed there | not yet confirmed there |
-| Third-party switch, Victron output | yes (13 October) | not installed |
-| Third-party switch, Shelly direct | yes (13 October) | not installed |
+| Third-party switch, Victron output | yes (13 October) | yes, GX relay 2 (15 October); relay 1 (alarm relay) refused as it should be |
+| Third-party switch, Shelly direct | yes (13 October) | no Shelly on board |
+| Link safety (nothing switched at start, confirm-before-off) | tests only | installed 15 October; not yet seen in use |
+| Record trends checkbox | tests and browser only | not yet installed |
 | GX Outputs list steady against small wobbles in current | not yet confirmed there | yes (still moves on a change of 0.2 A or more, which renames the switch) |
 
 The bench was updated on the evening of 3 October; rows marked "not re-checked" or "not yet confirmed" are still to be checked there. Both Cerbos have Tailscale, so either can be reached from the other site.

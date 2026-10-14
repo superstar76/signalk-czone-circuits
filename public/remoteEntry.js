@@ -453,13 +453,21 @@ var signalk_czone_circuits = (function () {
       ),
 
       React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
+        React.createElement('label', null,
+          React.createElement('input', { type: 'checkbox', checked: configuration.trendsEnabled === true, disabled: busy, onChange: function (e) { persist({ trendsEnabled: e.target.checked }) } }),
+          ' Record trends'
+        ),
+        React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, configuration.trendsEnabled === true ? 'Keeps a history of every monitored value and circuit current, for the trend charts.' : 'Switched off. Tick to keep a history of every monitored value and circuit current, for the trend charts. Not needed if the data already goes to a database such as InfluxDB.')
+      ),
+
+      configuration.trendsEnabled !== true ? null : React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
         React.createElement('label', null, 'Trend folder (optional) ',
           React.createElement('input', { type: 'text', style: { width: '60%' }, placeholder: 'Automatic', defaultValue: configuration.trendDirectory || '', disabled: busy, onBlur: function (e) { if ((e.target.value || '').trim() !== (configuration.trendDirectory || '')) setTrendDirectory(e.target.value) } })
         ),
         React.createElement('div', { style: { marginTop: 6, fontSize: 12 } }, 'Blank = automatic. On a Victron GX trends go to an SD card or USB stick, never internal flash. On a Pi or PC they go to the Signal K data folder.')
       ),
 
-      React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
+      configuration.trendsEnabled !== true ? null : React.createElement('div', { style: { marginBottom: 14, padding: 12, border: '1px solid #ccc', borderRadius: 6 } },
         React.createElement('label', { style: { display: 'block' } }, 'Trend sample rate ',
           React.createElement('select', { value: String(configuration.trendSampleSeconds || 10), disabled: busy, onChange: function (e) { setTrendNumber('trendSampleSeconds', e.target.value) } },
             [[5, '5 seconds'], [10, '10 seconds'], [15, '15 seconds'], [30, '30 seconds'], [60, '1 minute']].map(function (o) {
