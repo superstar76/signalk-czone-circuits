@@ -41,11 +41,11 @@ const hex = s => Buffer.from(s.replace(/\s+/g, ''), 'hex')
   assert.strictEqual(decodeModuleStatus(hex('27 99 02 0D AA 02 00')), null)
   assert.strictEqual(decodeModuleStatus(null), null)
 
-  // Another kind of module (Control X PLUS, 0x36): not known, so no answer
-  // rather than a guess.
-  const cxp = decodeModuleStatus(hex('27 99 02 36 33 0E 01 00'))
-  assert.deepStrictEqual([cxp.module, cxp.kind, knowsKind(cxp.kind), knowsKind(0x0d)], [2, 0x36, false, true])
-  assert.strictEqual(inputState(cxp.kind, cxp.bitmap, 17), undefined)
+  // A kind of module whose inputs are not worked out (Meter Interface, 0x0E):
+  // no answer rather than a guess.
+  const mi = decodeModuleStatus(hex('27 99 04 0E 33 0E 01 00'))
+  assert.deepStrictEqual([mi.module, mi.kind, knowsKind(mi.kind), knowsKind(0x0d), knowsKind(0x36)], [4, 0x0e, false, true, true])
+  assert.strictEqual(inputState(mi.kind, mi.bitmap, 17), undefined)
 }
 
 // --- Two inputs with one name get separate paths.
@@ -198,15 +198,43 @@ function boot (fixture) {
   } finally { Date.now = realNow }
 }
 
-// --- Compass Rose: its inputs are on Control X PLUS modules (kind 0x36). Where
-//     they sit in that module's bitmap is not known yet, so nothing is claimed.
+// --- Compass Rose: inputs on Control X PLUS modules (kind 0x36), from its
+//     status message: input i at bit i (bit i+1 when switched to negative).
+//     Frames from the boat, 14 Oct 2026 UTC, each input operated twice.
 {
+  // Low-level: the bits, and the two wirings.
+  const at = (frame, input, wiring) => { const s = decodeModuleStatus(hex(frame)); return inputState(s.kind, s.bitmap, input, STATUS_PGN, wiring) }
+  assert.deepStrictEqual([17, 24].map(i => at('27 99 02 36 13 24 01 00', i, 'switchToPos')), [false, false]) // at rest
+  assert.strictEqual(at('27 99 02 36 13 24 03 00', 17, 'switchToPos'), true) // Anchor Up
+  assert.strictEqual(at('27 99 02 36 13 24 01 01', 24, 'switchToPos'), true) // Ignition
+  assert.strictEqual(at('27 99 02 36 13 24 09 00', 18, 'switchToNeg'), true) // High Bilge Water Alarm
+  assert.strictEqual(at('27 99 02 36 13 24 01 00', 18, 'switchToNeg'), false)
+  assert.strictEqual(at('27 99 02 36 13 24 09 00', 17, 'switchToPos'), false) // the bilge is not Anchor Up
+  assert.strictEqual(at('27 99 02 36 FF FF 00 00', 17, 'switchToPos'), false) // outputs are not inputs
+  assert.strictEqual(at('27 99 02 36 FF FF 00 00', 5, 'switchToPos'), undefined) // below 16 is outputs, never an input
+  // Its 65308 messages are not read: variant 00 copies the status, 01/06 are something else.
+  assert.strictEqual(inputState(0x36, 0xffffffff, 17, INPUT_PGN, 'switchToPos'), undefined)
+
   const b = boot('Compass-Rose-03.10.26.zcf')
+  const value = name => b.inputs().find(i => i.name === name).readings[0].value
+  const names = ['BMS Pre-Alarm', 'Anchor Up', 'High Bilge Water Alarm', 'Ignition']
   assert.deepStrictEqual(b.inputs().map(i => [i.name, i.module, i.input]), [['BMS Pre-Alarm', 1, 24], ['Anchor Up', 2, 17], ['High Bilge Water Alarm', 2, 18], ['Ignition', 2, 24]])
-  b.bus('1CFF0400 27 99 01 36 0C 00 01 00') // frames from the boat, 3 Oct 2026
-  b.bus('1CFF0402 27 99 02 36 33 0E 01 00')
-  assert.deepStrictEqual(b.deltas.filter(d => d[0].includes('.inputs.')), [])
-  assert(b.inputs().every(i => !i.mapped && i.note === 'Input state is not decoded yet for this kind of module (0x36)'))
+  const step = (m1, m2, expected) => {
+    b.bus(`1CFF0401 27 99 01 36 ${m1}`)
+    b.bus(`1CFF0402 27 99 02 36 ${m2}`)
+    // The other 65308 variants from the same modules change nothing.
+    for (const v of ['1CFF1C02 27 99 02 01 40 00 00 00', '1CFF1C02 27 99 02 03 00 00 04 00', '1CFF1C02 27 99 02 06 00 00 07 00', '1CFF1C01 27 99 01 06 00 00 5F 00']) b.bus(v)
+    assert.deepStrictEqual(names.map(value), expected, `${m1} / ${m2}`)
+  }
+  step('08 00 01 00', '13 24 01 00', [false, false, false, false]) // at rest
+  step('08 00 01 00', '13 24 09 00', [false, false, true, false]) // bilge float up
+  step('08 00 01 00', '13 24 01 00', [false, false, false, false])
+  step('88 00 01 00', '13 24 01 01', [false, false, false, true]) // ignition on (module 1 output 7 follows)
+  step('08 00 01 00', '13 24 01 00', [false, false, false, false])
+  step('08 01 01 00', '13 24 03 00', [false, true, false, false]) // anchor up (module 1 output 8 follows)
+  step('08 00 01 00', '13 24 01 00', [false, false, false, false])
+  assert(b.inputs().every(i => i.mapped))
+  assert(b.deltas.some(d => /High_Bilge_Water_Alarm/.test(d[0]) && d[1] === true))
   b.monitor.stop()
 }
 
