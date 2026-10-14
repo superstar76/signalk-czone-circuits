@@ -295,7 +295,7 @@ A switch that is not on the CZone network (a Shelly, a GX relay, anything in the
 
 1. **CZone circuit:** choose the virtual circuit.
 2. **Linked to:** choose one of:
-   - **A Victron output (through the GX):** pick the output from the list. It lists everything in the GX switch pane by the names given on the GX. A Shelly must first be added to the GX (under Integrations in the GX settings). Press **Look again** if it was added after the page was opened.
+   - **A Victron output (through the GX):** pick the output from the list. It lists everything in the GX switch pane by the names given on the GX, including the GX's own relays and any I/O extender relays. A relay is offered only when its function on the GX is **Manual**; one used as an alarm relay, for a generator, a tank pump or temperature is shown greyed out with the reason. A Shelly must first be added to the GX (under Integrations in the GX settings). Press **Look again** if it was added after the page was opened.
    - **A Shelly (directly, by IP address):** enter its address and channel (0 for a single-relay Shelly) and press **Test**. It should answer "Found: switch is ON" or "OFF". Reserve the address in the router so it does not change. Shelly Gen2 or later, with no password.
 3. Press **Link**. **Allow this plugin to send NMEA 2000 messages** must also be ticked (section 2.3), so that the CZone circuit can follow the switch.
 

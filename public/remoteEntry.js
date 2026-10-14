@@ -431,7 +431,7 @@ var signalk_czone_circuits = (function () {
           ? React.createElement('div', { style: { marginTop: 8 } },
               React.createElement('select', { value: bridgeOutput, disabled: busy || !outputs || outputs.loading || !(outputs.outputs || []).length, onChange: function (e) { setBridgeOutput(e.target.value) } },
                 [React.createElement('option', { key: '', value: '' }, !outputs || outputs.loading ? 'Looking for Victron outputs…' : (outputs.outputs || []).length ? 'Choose an output' : (outputs.detail || 'No switchable outputs found on the GX'))].concat(
-                  (outputs && outputs.outputs ? outputs.outputs : []).map(function (o) { return React.createElement('option', { key: o.value, value: o.value }, o.label) })
+                  (outputs && outputs.outputs ? outputs.outputs : []).map(function (o) { return React.createElement('option', { key: o.value, value: o.value, disabled: o.available === false }, o.label + (o.available === false ? ' (' + o.reason + ')' : '')) })
                 )
               ),
               React.createElement('button', { type: 'button', style: { marginLeft: 8 }, disabled: busy, onClick: loadOutputs }, 'Look again')

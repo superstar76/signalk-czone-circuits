@@ -274,6 +274,14 @@ function rig ({ device = false, circuit = false, sending = true } = {}) {
         '/SwitchableOutput/0/Name': 'Channel 0', '/SwitchableOutput/0/Settings/CustomName': 'Power Board', '/SwitchableOutput/0/Settings/Type': 1
       },
       'com.victronenergy.switch.relay': { '/SwitchableOutput/1/State': 0, '/SwitchableOutput/1/Name': 'Relay 1', '/ProductName': 'GX relays' },
+      // The GX's own relays, as Compass Rose showed them (15 Oct 2026): relay 1
+      // is the alarm relay, relay 2 is manual. Values come back as numbers.
+      'com.victronenergy.system': {
+        '/Dc/Battery/Soc': 84,
+        '/SwitchableOutput/0/Name': 'GX internal relay 1', '/SwitchableOutput/0/Settings/CustomName': '', '/SwitchableOutput/0/Settings/Function': 0, '/SwitchableOutput/0/Settings/Type': 1, '/SwitchableOutput/0/State': 0,
+        '/SwitchableOutput/1/Name': 'GX internal relay 2', '/SwitchableOutput/1/Settings/CustomName': '', '/SwitchableOutput/1/Settings/Function': 2, '/SwitchableOutput/1/Settings/Type': 1, '/SwitchableOutput/1/State': 0
+      },
+      'com.victronenergy.switch.virtual_dimmer': { '/SwitchableOutput/0/State': 1, '/SwitchableOutput/0/Name': 'Saloon dimmer', '/SwitchableOutput/0/Settings/Type': 2 },
       'com.victronenergy.battery.ttyS5': { '/Soc': 84 },
       'com.victronenergy.switch.czone_circuits': { '/SwitchableOutput/Light_1/State': 1 }
     }
@@ -304,11 +312,32 @@ function rig ({ device = false, circuit = false, sending = true } = {}) {
     await assert.rejects(d.read({ service: 'com.victronenergy.battery.ttyS5', output: '0' }), /no such path/)
     // The list for the settings page: the PM1 by its name, the GX relay found
     // without GetItems, not the battery, not this plugin's own pane.
+    // The GX's relays are offered only when Manual; the alarm relay is listed
+    // with the reason and cannot be picked; a dimmer is not an on/off switch.
     const list = await d.list()
-    assert.deepStrictEqual(list.map(o => [o.label, o.value]), [
-      ['GX relays Relay 1', 'com.victronenergy.switch.relay#1'],
-      ['Power Board', 'com.victronenergy.acload.shelly_28372F37CD6C_0#0']
+    assert.deepStrictEqual(list.map(o => [o.label, o.value, o.available, o.reason]), [
+      ['GX internal relay 1', 'com.victronenergy.system#0', false, 'used by the GX as alarm relay'],
+      ['GX internal relay 2', 'com.victronenergy.system#1', true, undefined],
+      ['GX relays Relay 1', 'com.victronenergy.switch.relay#1', true, undefined],
+      ['Power Board', 'com.victronenergy.acload.shelly_28372F37CD6C_0#0', true, undefined],
+      ['Saloon dimmer', 'com.victronenergy.switch.virtual_dimmer#0', false, 'not an on/off output']
     ])
+    const sys = items['com.victronenergy.system']
+    const relay2 = { service: 'com.victronenergy.system', output: '1', label: 'GX internal relay 2' }
+    await d.write(relay2, true)
+    assert.strictEqual(sys['/SwitchableOutput/1/State'], 1)
+    assert.strictEqual(await d.read(relay2), true)
+    // The alarm relay is never written, however it got linked.
+    const relay1 = { service: 'com.victronenergy.system', output: '0' }
+    await assert.rejects(d.write(relay1, true), /not switched: used by the GX as alarm relay/)
+    assert.strictEqual(sys['/SwitchableOutput/0/State'], 0)
+    // A linked relay handed to the GX later (here: tank pump) stops being switched.
+    sys['/SwitchableOutput/1/Settings/Function'] = 3
+    await assert.rejects(d.write(relay2, false), /used by the GX as tank pump/)
+    assert.strictEqual(sys['/SwitchableOutput/1/State'], 1)
+    sys['/SwitchableOutput/1/Settings/Function'] = 2
+    await d.write(relay2, false)
+    assert.strictEqual(sys['/SwitchableOutput/1/State'], 0)
   }
 
   // --- The plugin, end to end: bench configuration, a stand-in Shelly, the
