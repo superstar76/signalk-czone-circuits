@@ -4,9 +4,9 @@ What the fork adds to Matt Mitchell's plugin and what it changes, as of 15 Octob
 
 **Fork:** `github.com/superstar76/signalk-czone-circuits`, branch `monitoring`
 **Based on:** Matt Mitchell's `signalk-czone-circuits`, `main` at `45c47d1` (beta.20), merged in with no conflicts. His beta.22 restructure is not merged yet.
-**State:** 15 October 2026. Matt's plugin is on npm (0.3.0-beta.9); trends are with him as #23, the parser fixes as signalk-czone-zcf #13.
+**State:** 15 October 2026 (evening). Matt's new plugin, `signalk-czone`, is on npm at 0.3.0-beta.13. From this work it now has confirm before on/off (#17), Control X PLUS current (#18), trends off by default (#24, from our #23) and the honest connection line (#25). The parser fixes are with him as `signalk-czone-zcf` #13. See section 13.
 **Run on:** the CZone test bench and Compass Rose, both on a Cerbo GX with Venus OS 3.80 and Signal K 2.27, and both reachable remotely over Tailscale
-**Size:** about 4,300 lines of new code in 15 new files (and two small shell scripts), 2,000 lines of new tests in 10 new test files, and about 430 lines added to four of Matt's files
+**Size:** about 5,300 lines of new code in 20 new files (and three small shell scripts), 3,200 lines of new tests in 15 new test files with 4 new sample ZCFs, and about 980 lines added to six of Matt's files
 
 ## Summary
 
@@ -365,11 +365,11 @@ The webapp pages are not covered by `npm test`. They were checked by hand in a c
 | Switch inputs, Signal Interface | yes (65284 and 65308) | does not apply |
 | Switch inputs, COI | no COI; decoded from Matt's SugarShack capture | does not apply |
 | Switch inputs, Control X PLUS | does not apply | yes (15 October): Anchor Up, Ignition, bilge float |
-| Connection line | not yet confirmed there | not yet confirmed there |
+| Connection line | installed 13 October | installed 15 October |
 | Third-party switch, Victron output | yes (13 October) | yes, GX relay 2 (15 October); relay 1 (alarm relay) refused as it should be |
 | Third-party switch, Shelly direct | yes (13 October) | no Shelly on board |
 | Link safety (nothing switched at start, confirm-before-off) | tests only | installed 15 October; not yet seen in use |
-| Record trends checkbox | tests and browser only | not yet installed |
+| Record trends checkbox | tests and browser only | installed 15 October, ticked |
 | GX Outputs list steady against small wobbles in current | not yet confirmed there | yes (still moves on a change of 0.2 A or more, which renames the switch) |
 
 The bench was updated on the evening of 3 October; rows marked "not re-checked" or "not yet confirmed" are still to be checked there. Both Cerbos have Tailscale, so either can be reached from the other site.
@@ -382,7 +382,9 @@ The chartplotter view adds a second plugin, `signalk-navico-embedder`, which con
 
 ## 12. Limits and open items
 
-- **Matt's beta.22 restructure is not merged.** A clean-up pass of the fork is planned with that merge: one source of state for the pane, one way of choosing a sender, and the monitor's main file split up.
+- **The fork stays on Matt's old plugin.** It will not be merged as a whole. Its features go to Matt's new plugin (`signalk-czone`, on npm) one pull request at a time, rebuilt to fit his code (section 13). Once the ones that matter are in, Compass Rose and the bench move to his plugin.
+- **Trend storage, two fixes to bring back from Matt.** His review of #23 found that a custom trend folder could get round the GX "card or stick only" rule, and that card detection could stay cached after a card is removed. Fixed in his #24; the fork's trend code has the same origin and needs the same two fixes.
+- **Overview page:** an idea for a power overview tab, worked to a second mock-up and parked (separate write-up, 15 October). No code.
 - **Our own copy of the circuit parser.** `lib/zcf-circuits.js` is Matt's structural parser plus the hidden-duplicate rule. Once his has the rule, ours can go.
 - **Control X PLUS inputs wired to negative** are read one bit above their number, from a single example (Compass Rose's bilge float). A second input to negative on another boat would confirm it.
 - **Third-party switches:** a Shelly with a password is not supported yet (digest login). A Shelly Gen1 is not supported. Dimmers and other non-on/off outputs are not linked, only on and off.
@@ -401,13 +403,23 @@ The chartplotter view adds a second plugin, `signalk-navico-embedder`, which con
 - **Compass Rose network.** The plotter sat behind the PredictWind DataHub Pro, on a different network from the Cerbo, so no tile could reach it. For the test the Cerbo's cable was moved to the DataHub, which left the Cerbo on two networks and made `venus.local` unreliable from the laptop. A Teltonika TSW010 switch is to go on the RUT200's LAN port with the Cerbo and the plotter on it; then the embedder's IP override changes to the Cerbo's wired address, the plotter's address goes on the embedder's client list, and the Cerbo's Wi-Fi goes off.
 - **Parked from the bench:** units from the ZCF, RGB circuits (an RGBW light is on order; it needs a Control X PLUS and a capture while the colour is changed), a Node-RED palette, the occasional current drop-out.
 
-## 13. Before opening the pull request
+## 13. Getting this into Matt's plugin
 
-- [ ] Leave `docs/HANDOVER-czone-signalk.md` and `docs/BRIEF-FOR-MATT.md` out. They are working notes and name customer boats.
-- [ ] `docs/INSTALL-AND-USE.md` goes in: it names no boats. Rewrite its install section once the plugin is in the Appstore.
-- [ ] Merge Matt's latest `main` and do the clean-up pass.
-- [ ] If his parser has the hidden-duplicate rule, use it and drop `lib/zcf-circuits.js`.
-- [ ] Remove the two leftover `status-fallback` files on GitHub.
-- [ ] Settle the hide rule with Matt.
-- [ ] Decide whether the chartplotter layout goes in the pull request or follows it.
-- [ ] Re-check on the bench and on Compass Rose.
+Features go to Matt's new plugin (`mattsmitchell/signalk-czone`) as separate pull requests, each rebuilt on his current `main`, never the fork wholesale. Pull requests come from `superstar76/signalk-czone` (the plugin) and `superstar76/signalk-czone-zcf` (the parser).
+
+| Feature | Where it is |
+|---|---|
+| Confirm before turning on or off | In his plugin: #17 (Matt's, from our #16) |
+| Control X PLUS circuit current (130825) | In his plugin: #18 |
+| Trends, off unless ticked | In his plugin: #24 (Matt's, from our #23, with GX storage protections), beta.10 |
+| Connection line says Connected only while live | In his plugin: #25, beta.12 |
+| Newer Configuration Tool files; tank settings from their own record; internal copies | Parser pull request #13, waiting for Matt. Then his plugin moves to that parser version (Meitaki 109 -> 107 circuits) |
+| Switch inputs (Signal Interface, COI, Control X PLUS) | Next pull request |
+| Third-party switches (Shelly, Victron outputs, GX relays, link safety, Node-RED virtual switches) | After switch inputs |
+| Chartplotter fixes (`??` twice and 20 flex `gap` rules, still in beta.13) | Small pull request |
+| Chartplotter touch layout | Discuss with Matt first |
+| Victron switch pane; third-party sensor listener | Ask Matt whether he wants them |
+| Monitoring extras; a circuit's own load | Compare with his monitoring and his #22 / #26 first |
+| Hidden circuits rule; favourites on the server | Waiting on Matt's decisions |
+
+Never sent: `docs/HANDOVER-czone-signalk.md` and `docs/BRIEF-FOR-MATT.md` (working notes that name customer boats). `docs/INSTALL-AND-USE.md` names no boats and can go with the features it describes.
