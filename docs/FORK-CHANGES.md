@@ -177,6 +177,12 @@ A switch that is not on the CZone network (a Shelly, a GX relay, any output in t
 - **Self-contained:** `lib/bridge/` has no CZone or Signal K code in it; it is given a way to read and write a circuit and the two drivers, so it can move to Matt's plugin as it is.
 - **Tested** by the plugin's tests (the linking rules on a stand-in switch and circuit, both drivers against stand-ins, and the whole plugin with the bench configuration: a Shelly switched off brings a CZone OFF command for the virtual circuit). On the bench by hand: both Shelly commands, and the Victron output by `dbus` from the command line, before the plugin was written. Both routes then confirmed on the bench by Matthew on 13 October.
 
+### 1.11 Tablet app (iPad, Android)
+
+- **From Matt's plugin (0.3.0-beta.13):** the fullscreen button beside the CZone logo, and the home-screen app (manifest and icons), so the webapp opens full screen like an app. Over HTTPS (signalk-ssl) a tablet launches it with no address bar. Hidden on the chartplotter, whose tile is already full screen.
+- **Login on the page:** a home-screen app keeps its own login, separate from the browser, and has no address bar to reach the Signal K admin page. When Signal K refuses the circuit list, the page now shows a user name and password form (Signal K's own login, "remember me" on) instead of a link to the admin page.
+- **Checked** in a current Chromium (form, wrong password, login, list loads) and in Chromium 69 (plotter: no button, no errors). Still to be seen on an iPad and an Android tablet.
+
 ## 2. How readings are found with nothing configured
 
 - **The ZCF gives the identity.** Each meter and sender has an NMEA 2000 instance in the ZCF (and a source or fluid type for senders). The same numbers are in the standard PGNs on the bus.

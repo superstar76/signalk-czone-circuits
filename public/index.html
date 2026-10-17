@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#071321">
   <link rel="icon" type="image/png" href="icon.png">
-  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="CZone">
   <title>CZone Circuits</title>
   <style>
     :root {
@@ -39,7 +43,21 @@
     .sidebar, .rightbar { background: rgba(5, 16, 29, .78); backdrop-filter: blur(18px); border-color: var(--line); }
     .sidebar { border-right: 1px solid var(--line); padding: 22px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
     .rightbar { border-left: 1px solid var(--line); padding: 22px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
-    .brand { display:flex; align-items:center; gap:11px; padding: 2px 10px 25px; }
+    .brand { display:flex; flex-wrap:nowrap; align-items:center; gap:11px; padding: 2px 10px 25px; }
+    /* Fullscreen button and home-screen app: from Matt's plugin (0.3.0-beta.13). */
+    .fullscreen-toggle { margin-left:auto; flex:0 0 44px; width:44px; height:44px; display:grid; place-items:center; padding:10px; border:1px solid rgba(56,169,255,.25); border-radius:12px; background:linear-gradient(145deg,rgba(24,213,232,.12),rgba(56,169,255,.05)); color:var(--cyan); cursor:pointer; transition:background .15s, border-color .15s; }
+    .fullscreen-toggle:hover { background:rgba(24,213,232,.18); border-color:var(--cyan); }
+    .fullscreen-toggle:disabled { opacity:.55; cursor:wait; }
+    .fullscreen-toggle svg { width:22px; height:22px; }
+    .fullscreen-toggle .fullscreen-collapse, .fullscreen-toggle[aria-pressed="true"] .fullscreen-expand { display:none; }
+    .fullscreen-toggle[aria-pressed="true"] .fullscreen-collapse { display:inline; }
+    .fullscreen-toggle[hidden] { display:none; }
+    .fullscreen-toggle:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; }
+    body { padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    .login-form { display:grid; gap:10px; max-width:280px; margin:18px auto 0; text-align:left; }
+    .login-form input { padding:11px 12px; border-radius:10px; border:1px solid var(--line); background:rgba(255,255,255,.05); color:var(--text); font-size:16px; }
+    .login-form button { padding:11px 12px; border-radius:10px; border:0; background:linear-gradient(135deg,#168eea,#2164b8); color:#fff; font-weight:700; font-size:15px; cursor:pointer; }
+    .login-form .login-error { color:#ff8a9a; font-size:13px; min-height:1em; }
     .brand-mark { width:38px; height:38px; display:block; object-fit:contain; border-radius:10px; box-shadow: 0 8px 25px rgba(31,154,255,.24); }
     .brand strong { display:block; font-size:17px; letter-spacing:.2px; }
     .brand span { color:var(--muted); font-size:12px; }
@@ -218,6 +236,7 @@
     .mfd .sidebar { padding:12px 10px; }
     .mfd .rightbar { padding:0 10px 14px; }
     .mfd .brand { padding:2px 8px 12px; }
+    .mfd .fullscreen-toggle { display:none !important; } /* the plotter's tile is already full screen */
     .mfd .brand > * + *, .mfd .category-card > * + * { margin-left:11px; }
     .mfd .nav button { min-height:50px; font-size:16px; padding:10px 12px; margin-bottom:4px; }
     .mfd .nav-icon { width:24px; margin-right:12px; flex:none; }
@@ -273,7 +292,12 @@
   <div class="app">
     <div class="leftwell">
     <aside class="sidebar">
-      <div class="brand"><img class="brand-mark" src="icon.png" alt="CZone" width="38" height="38"><div><strong>CZone</strong><span>Boat Systems</span></div></div>
+      <div class="brand"><img class="brand-mark" src="icon.png" alt="CZone" width="38" height="38"><div><strong>CZone</strong><span>Boat Systems</span></div><button id="fullscreenToggle" class="fullscreen-toggle" type="button" aria-label="Show CZone fullscreen" title="Show CZone fullscreen" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path class="fullscreen-expand" d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>
+          <path class="fullscreen-collapse" d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/>
+        </svg>
+      </button></div>
       <div class="nav" id="mainNav"></div>
       <div class="separator"></div>
       <div class="section-label">Categories</div>
@@ -681,7 +705,25 @@
     const el = document.querySelector('#circuits');
     if (el && !circuits.length) patch(el, MFD
       ? '<div class="empty">Signal K refused the request. On a chartplotter the login comes from the Navico embedder plugin: generate its authentication token and save.</div>'
-      : '<div class="empty">Signal K needs a login to show the circuits. <a href="/admin/#/login" style="color:#54c7ff">Log in</a>, then reload this page.</div>');
+      : '<div class="empty">Signal K needs a login to show the circuits.<form class="login-form" id="loginForm" autocomplete="on"><input name="username" autocomplete="username" placeholder="Signal K user" required><input name="password" type="password" autocomplete="current-password" placeholder="Password" required><button type="submit">Log in</button><span class="login-error" id="loginError"></span></form></div>');
+    // [fork] Log in on the page itself. A home-screen app (iPad, Android)
+    // keeps its own login, separate from the browser's, and has no address
+    // bar to reach the Signal K admin page with. "Remember me" keeps the
+    // login after the app is closed, for as long as Signal K's token lasts.
+    const form = el && el.querySelector('#loginForm');
+    if (form && !form.dataset.wired) {
+      form.dataset.wired = '1';
+      form.addEventListener('submit', async ev => {
+        ev.preventDefault();
+        const err = form.querySelector('#loginError');
+        err.textContent = '';
+        try {
+          const r = await fetch('/signalk/v1/auth/login', { method:'POST', credentials:'include', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ username: form.username.value, password: form.password.value, rememberMe: true }) });
+          if (r.ok) { location.reload(); return; }
+          err.textContent = r.status === 401 ? 'Wrong user name or password.' : `Signal K refused the login (${r.status}).`;
+        } catch (_) { err.textContent = 'Signal K could not be reached.'; }
+      });
+    }
   }
   async function refreshOnce(reason = 'manual') {
     try {
@@ -1049,6 +1091,7 @@
 
 })();
 </script>
+<script src="fullscreen.js"></script>
 <script src="monitor.js"></script>
 </body>
 </html>

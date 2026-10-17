@@ -192,6 +192,18 @@ What you get:
 - **Renaming:** names, groups and the device name can be edited on the GX and are kept.
 - **Order:** the GX lists switches alphabetically within a group. That cannot be changed.
 
+## 6a. On an iPad or Android tablet, as an app
+
+The webapp can be put on a tablet's home screen and opened full screen, like an app, on board or (with Tailscale) from home.
+
+1. **HTTPS on Signal K** (for the full-screen launch): install the **signalk-ssl** plugin. In its settings, the certificate names (SANs) must include every address the tablet will use: the Cerbo's `.local` name and LAN address (filled in for you), and its Tailscale name (for example `compass-rose.tail7d01a7.ts.net`) if it will be used from home. Save, then in Signal K **Server Settings** turn on **Use SSL** and restart.
+2. **Trust the certificate on the tablet:** open `https://<address>:3443/signalk-ssl/ca.crt` (or scan the plugin's QR code) and install it. iPad: Settings > General > VPN & Device Management to install the profile, then Settings > General > About > Certificate Trust Settings to turn on full trust. Android: install it as a CA certificate. Restart the tablet.
+3. **Open the webapp** at `https://<address>:3443/signalk-czone-circuits/` and log in on the page with a Signal K user that may switch. A home-screen app keeps its own login, separate from the browser's, so the page has its own login form. Signal K's token expiry (Security settings) decides how long the login lasts.
+4. **Add it to the home screen:** iPad: Share > Add to Home Screen (Safari is the most reliable). Android: Chrome menu > Install app or Add to Home screen.
+5. **From home:** install Tailscale on the tablet, signed in to the same account as the Cerbo, and use the Tailscale name in steps 3 and 4.
+
+The fullscreen button beside the CZone logo does the same in an ordinary browser tab. Without HTTPS the page works the same, with the browser's address bar showing.
+
 ## 7. Chartplotter (B&G, Simrad, Lowrance)
 
 The webapp can run as a tile on a Navico plotter. This part is new and has been tried on one plotter model so far.
