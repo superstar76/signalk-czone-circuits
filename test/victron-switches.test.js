@@ -45,9 +45,9 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(async status => {
   assert.deepStrictEqual(get('/State'), ['i', 0x100])
   assert.deepStrictEqual(get('/DeviceInstance'), ['i', 100])
   // One channel per circuit, grouped by CZone category
-  // Name is where it is wired (Venus OS lists "Name: CustomName"), not the circuit name again.
-  assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Name'), ['s', 'M01 ch01'])
-  assert.deepStrictEqual(get('/SwitchableOutput/Buzzer/Name'), ['s', 'M01 ch06'])
+  // Name is "CZone" for every switch (Venus OS lists "Name: CustomName"), not the circuit name again.
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Name'), ['s', 'CZone'])
+  assert.deepStrictEqual(get('/SwitchableOutput/Buzzer/Name'), ['s', 'CZone'])
   assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Settings/CustomName'), ['s', 'Light 1'])
   assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Settings/Group'), ['s', 'Lighting'])
   assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Settings/Type'), ['i', 1])
@@ -204,26 +204,3 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(async status => {
   console.log('Victron switch pane tests passed')
 }).catch(err => { console.error(err); process.exit(1) })
 
-// locationName on its own: numbering as the Configuration Tool, two-digit
-// channels, virtual switches, more than one output, groups and virtual circuits.
-{
-  const { locationName } = require('../lib/victron/switches')
-  assert.strictEqual(locationName({ ownOutputs: [{ module: 1, channel: 17 }] }), 'M01 ch18')
-  assert.strictEqual(locationName({ ownOutputs: [{ module: 0x1c, channel: 4 }] }), 'M1C ch05')
-  assert.strictEqual(locationName({ ownOutputs: [{ module: 2, channel: 33 }] }), 'M02 VS2')
-  assert.strictEqual(locationName({ ownOutputs: [{ module: 1, channel: 3 }, { module: 2, channel: 10 }] }), 'M01 ch04 +1')
-  assert.strictEqual(locationName({ ownOutputs: [], alsoDrives: ['Starlink'], module: 20, channel: 15 }), 'Group')
-  assert.strictEqual(locationName({ module: null, channel: null }), 'Virtual')
-  assert.strictEqual(locationName({ module: 2, channel: 5 }), 'M02 ch06', 'no ownOutputs: the circuit\'s own module and channel')
-  // Compass Rose: none repeats the circuit name, and every one fits D-Bus's 32 bytes.
-  const zcfLib = require('../lib/zcf')
-  const { prepareMapping } = require('../lib/fork-mapping')
-  for (const f of ['Compass-Rose-03.10.26.zcf', 'SugarShack-20260927-01.zcf', 'Meitaki-2026-10-15.zcf']) {
-    const m = zcfLib.load(path.join(__dirname, 'fixtures', f)); prepareMapping(m, {})
-    for (const c of m.circuits) {
-      const n = locationName(c)
-      assert(n !== c.name && Buffer.byteLength(n) <= 32, `${f}: ${c.name} -> ${n}`)
-    }
-  }
-  console.log('locationName tests passed')
-}

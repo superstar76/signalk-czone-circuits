@@ -103,7 +103,7 @@ An opt-in setting registers the circuits with the GX as `com.victronenergy.switc
 - **Order:** the GX lists switches alphabetically by label and has no other order. The label is written so a switch stays in the same place whether it is on or off.
 - **A steady label:** each change of a switch's name makes the GX re-sort its lists and jump to the selected row. So a reading that only wobbles (1.9 A, 2.0 A, 1.9 A) no longer changes the label. A step of 0.2 A or half a degree shows at once, as do on and off; a smaller change shows once it has held for two minutes (current) or five (temperature). The GX's own current column is always exact.
 - **Edits made on the GX are kept:** switch names, groups and types, and the device's own name.
-- **Where it is wired, in the device list:** Settings > Devices lists each switch as "Name: label", so each switch's Name is its CZone location, numbered as in the Configuration Tool: "M01 ch18: AFT Outlets". A circuit on more than one output shows the first and how many more ("M01 ch04 +1"); one with no output of its own is "Group", one with no module "Virtual". That list sorts by module and channel.
+- **The device list:** Settings > Devices lists each switch as "Name: label", so every switch's Name is "CZone": "CZone: Freezer (13.3 °C)", in A-Z order. (The circuit name showed it twice; a module and channel number meant nothing to most people.)
 
 ### 1.6 The circuit list
 
@@ -279,7 +279,7 @@ All under `/plugins/signalk-czone-circuits`.
 | Signal K could crash when the plugin was stopped while starting | Unhandled error on a D-Bus connection closed mid-handshake | Error handled; overtaken starts end cleanly |
 | "Solar" showed 12.6 V, 0 A | Three devices on DC instance 1; the wrong one was taken | Device matched by DC type |
 | AC not shown | Boat's AC data is on PGNs 127503 / 127504 | Both AC styles decoded |
-| Every name twice in the GX device list ("AFT Outlets: AFT Outlets") | The list shows "Name: label" and both were the circuit name | Name is the circuit's CZone location ("M01 ch18: AFT Outlets") |
+| Every name twice in the GX device list ("AFT Outlets: AFT Outlets") | The list shows "Name: label" and both were the circuit name | Name is "CZone" for every switch ("CZone: AFT Outlets") |
 | Switches changed place in the pane when turned on | The current suffix changed the alphabetical order | Suffix written as "(1.5 A)" |
 | Device name on the GX would not hold | The plugin refused the edit | Edit accepted and kept |
 | Bilge pumps under "DC" | Bilge Pumps category not located | Found and named |
