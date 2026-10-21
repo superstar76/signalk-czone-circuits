@@ -575,6 +575,39 @@ function writeFebruary (folder, value) {
   monitor.stop()
 }
 
+// --- DC power is charted from the volts and amps already recorded, so its
+//     history goes back as far as theirs (Compass Rose: Solar, instance 1).
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'power-'))
+  const zcfFile = path.join(dir, 'installation.zcf')
+  fs.copyFileSync(path.join(__dirname, 'fixtures', 'Compass-Rose-03.10.26.zcf'), zcfFile)
+  const monitor = createMonitor({ getSelfPath: () => undefined, debug: () => {} })
+  monitor.start({ trendsEnabled: true, trendDirectory: path.join(dir, 'trends'), monitorWire: false }, zcfFile)
+  const store = monitor.getStore()
+  const now = Date.now()
+  // An hour ago, before power was ever recorded: 13.6 V; current steps 5 -> 8 A.
+  for (let k = 0; k < 6; k++) {
+    const t = now - 3600e3 + k * 60e3
+    store.record('electrical.batteries.1.voltage', 13.6, t)
+    store.record('electrical.batteries.1.current', k < 3 ? 5 : 8, t + 2000) // a little after the volts
+  }
+  store.flush()
+  const routes = {}
+  monitor.registerRoutes({ get: (p, fn) => { routes[p] = fn } })
+  let out
+  routes['/trend']({ query: { path: 'electrical.batteries.1.power', range: '24h' } }, { json: v => { out = v }, status: () => ({ json: v => { out = v } }) })
+  assert.strictEqual(out.available, true)
+  assert.deepStrictEqual(out.computed, ['voltage', 'current'])
+  const values = [...new Set(out.data.map(r => r[1]))]
+  assert.deepStrictEqual(values, [68, 108.8], JSON.stringify(out.data))
+  assert(out.data[0][0] >= now - 3600e3 && out.data[0][0] < now - 3590e3, 'from the start of the volts and amps')
+  // A plain path is read as before.
+  routes['/trend']({ query: { path: 'electrical.batteries.1.voltage', range: '24h' } }, { json: v => { out = v } })
+  assert.strictEqual(out.computed, undefined)
+  assert.strictEqual(out.data[0][1], 13.6)
+  monitor.stop()
+}
+
 // --- What Signal K sends, as the "Signal K to NMEA 2000" plugin builds it.
 {
   const { decodeSensorJson } = require('../lib/monitor/sensors')
@@ -640,3 +673,12 @@ function writeFebruary (folder, value) {
 }
 
 console.log('Monitor tests passed')
+
+// --- The page asks for monitor.js and monitor.css by version, and carries the
+//     same version in its own script, so a change reaches open pages.
+{
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8')
+  const v = (html.match(/const ASSETS_VERSION = '([^']+)'/) || [])[1]
+  assert(v, 'ASSETS_VERSION in the page script')
+  assert(html.includes(`href="monitor.css?v=${v}"`) && html.includes(`src="monitor.js?v=${v}"`), 'links carry the same version')
+}

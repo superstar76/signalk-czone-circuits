@@ -286,7 +286,7 @@
     .mfd .nav button.active:hover { background:#12456e; }
     .mfd-probe { position:fixed; left:8px; bottom:8px; z-index:9; margin:0; padding:8px 10px; max-width:70%; font:12px/1.35 monospace; color:#d6f5d6; background:rgba(0,0,0,.88); border:1px solid #2c6; border-radius:8px; white-space:pre; pointer-events:none; }
   </style>
-  <link rel="stylesheet" href="monitor.css">
+  <link rel="stylesheet" href="monitor.css?v=2026-10-21b">
 </head>
 <body>
   <div class="app">
@@ -328,6 +328,10 @@
 <script>
 (() => {
   const OWN_SCRIPT = document.currentScript ? document.currentScript.textContent : null; // see "a newer page" below
+  // [fork] Version of monitor.js / monitor.css, also on their links above.
+  // Change all three together: the browser then fetches the new files, and an
+  // open page sees its own script change and reloads (see "a newer page").
+  const ASSETS_VERSION = '2026-10-21b';
   const API = '/plugins/signalk-czone-circuits';
   const SK = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/signalk/v1/stream?subscribe=none`;
   const categoryIcons = { Lighting:'💡', Navigation:'◉', Pumps:'♨', Power:'⚡', Entertainment:'♫', 'Fans/Ventilation':'✣', Electronics:'▦', Climate:'❄', Galley:'🍴', 'Deck Equipment':'⚓', Safety:'⬟', Miscellaneous:'•••', Refrigeration:'❆', 'Bilge Pumps':'♨', 'House/Habitat':'⌂', 'Vessel Critical':'⚠', '24-Hour Circuits':'◷', Communications:'☎', Accessories:'✚', 'Indicators and Alarms':'🔔', 'Engine Management':'⚙', 'Vessel Management':'⚓', 'Propulsion Management':'✇', Appliances:'▤', Other:'•••' };
@@ -1092,6 +1096,6 @@
 })();
 </script>
 <script src="fullscreen.js"></script>
-<script src="monitor.js"></script>
+<script src="monitor.js?v=2026-10-21b"></script>
 </body>
 </html>
