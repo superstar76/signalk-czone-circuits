@@ -176,3 +176,25 @@
 .mfd .mon-check input { width:22px; height:22px; }
 .mfd .mon-value { min-height:50px; font-size:17px; }
 .mfd .mon-controls button, .mfd .mon-controls select { min-height:44px; font-size:14px; }
+
+/* [fork] A trend opens as a window in the middle of the page, so the page
+   under it stays where it was; it can be made full screen, and fills the
+   screen on a phone. No min()/max(): the plotter's browser is Chromium 69. */
+.mon-trend.show { position:fixed; z-index:61; left:50%; top:50%; transform:translate(-50%,-50%); width:960px; max-width:calc(100vw - 32px); max-height:calc(100vh - 32px); overflow:auto; margin:0; background:var(--panel); box-shadow:0 24px 60px rgba(0,0,0,.6); }
+.mon-trend.show.full { left:0; top:0; right:0; bottom:0; transform:none; width:auto; max-width:none; max-height:none; border-radius:0; }
+.mon-trend.full .mon-chart canvas { height:calc(100vh - 300px); min-height:240px; }
+.mon-backdrop { display:none; position:fixed; z-index:60; left:0; top:0; right:0; bottom:0; background:rgba(2,10,20,.72); }
+.mon-backdrop.show { display:block; }
+body.mon-trend-open { overflow:hidden; }
+.mon-trend .section-head .mon-full { margin-left:auto; cursor:pointer; padding:7px 10px; }
+.mon-trend .section-head .mon-full svg { width:15px; height:15px; display:block; fill:none; stroke:currentColor; stroke-width:2; }
+.mon-trend .section-head .mon-close { margin-left:8px; }
+@media (max-width: 600px) {
+  .mon-trend.show { left:0; top:0; right:0; bottom:0; transform:none; width:auto; max-width:none; max-height:none; border-radius:0; margin:0; grid-column:auto; order:0; }
+  .mon-trend .section-head .mon-full { display:none; }
+  .mon-trend .section-head .mon-close { margin-left:auto; }
+  .mon-trend.show .mon-chart canvas { height:calc(100vh - 320px); min-height:200px; }
+}
+@media (min-width: 601px) and (max-width: 780px) {
+  .mon-trend.show { margin:0; grid-column:auto; order:0; }
+}

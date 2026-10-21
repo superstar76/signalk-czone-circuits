@@ -1358,11 +1358,9 @@ module.exports = function (app) {
           fs.copyFileSync(source, temp)
           const next = zcf.load(temp)
           try { fs.unlinkSync(temp) } catch (_) {}
-          const newSettings = {
-            enableSending: settings.enableSending === true,
-            configurationSource: 'networkCache',
-            networkConfigFile: filename
-          }
+          // Only the configuration source changes; every other setting (confirm
+          // before off, switch pane, trends, third-party links, …) is kept.
+          const newSettings = { ...settings, configurationSource: 'networkCache', networkConfigFile: filename }
           const restartResult = await saveAndRestart(newSettings)
           res.json({ ok: true, file: filename, bytes: next.fileSize, vesselName: next.vesselName || null, configuration: newSettings, restartRequested: restartResult.restartRequested })
         } catch (err) { res.status(400).json({ ok: false, error: err.message }) }
@@ -1390,11 +1388,9 @@ module.exports = function (app) {
                 savedAt: new Date().toISOString()
               }, null, 2))
             } catch (_) {}
-            const newSettings = {
-              enableSending: settings.enableSending === true,
-              configurationSource: 'installedZcf',
-              networkConfigFile: ''
-            }
+            // Only the configuration source changes; every other setting (confirm
+            // before off, switch pane, trends, third-party links, …) is kept.
+            const newSettings = { ...settings, configurationSource: 'installedZcf', networkConfigFile: '' }
             const restartResult = await saveAndRestart(newSettings)
             res.json({
               ok: true,

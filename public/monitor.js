@@ -89,18 +89,28 @@
     panel.className = 'section mon-trend'
     panel.id = 'monPanel'
     panel.innerHTML = `
-      <div class="section-head"><span class="mon-trend-icon" id="monIcon"></span><div><h2 id="monTitle"></h2><span class="subtle" id="monSub"></span></div><button class="sort mon-close" aria-label="Close trend" data-close>✕ Close</button></div>
+      <div class="section-head"><span class="mon-trend-icon" id="monIcon"></span><div><h2 id="monTitle"></h2><span class="subtle" id="monSub"></span></div><button class="sort mon-full" id="monFull" aria-label="Full screen" aria-pressed="false" title="Full screen" data-full><svg viewBox="0 0 24 24" aria-hidden="true"><path id="monFullIcon" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button><button class="sort mon-close" aria-label="Close trend" data-close>✕ Close</button></div>
       <div class="mon-controls"><div class="mon-seg" id="monReadings"></div><div class="mon-seg" id="monRanges"></div><div class="mon-seg" id="monMode"></div><button class="sort mon-add" id="monAdd">＋ Add value</button></div>
       <div class="mon-custom" id="monCustom"><label>From <input type="datetime-local" id="monFrom"></label><label>To <input type="datetime-local" id="monTo"></label><button class="sort" id="monApply">Apply</button><span id="monCustomMsg"></span></div>
       <div class="mon-picker" id="monPicker"><input type="search" id="monSearch" placeholder="Search values…" aria-label="Search values"><div id="monPickList"></div></div>
       <div class="mon-stats" id="monStats"></div>
       <div class="mon-legend" id="monLegend"></div>
       <div class="mon-chart"><canvas id="monCanvas"></canvas><div class="mon-tip" id="monTip"></div><div class="mon-chart-msg" id="monMsg"></div></div>`
-    // [fork] Above the first list on the page, so a trend opens at the top
-    // whichever tab it is opened from (it used to sit between the circuit list
-    // and the Monitoring list: top of Monitoring, bottom of the circuit tabs).
+    // [fork] A window in the middle of the page (see monitor.css), over a
+    // backdrop; a tap on the backdrop closes it.
+    panel.setAttribute('role', 'dialog')
+    panel.setAttribute('aria-modal', 'true')
+    panel.setAttribute('aria-labelledby', 'monTitle')
+    const backdrop = document.createElement('div')
+    backdrop.className = 'mon-backdrop'
+    backdrop.id = 'monBackdrop'
+    backdrop.addEventListener('click', () => closeTrend())
+    main.insertBefore(backdrop, main.querySelector('.section') || section)
     main.insertBefore(panel, main.querySelector('.section') || section)
-    panel.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeTrend() })
+    panel.addEventListener('click', e => {
+      if (e.target.closest('[data-close]')) closeTrend()
+      else if (e.target.closest('[data-full]')) setTrendFull(!panel.classList.contains('full'))
+    })
     panel.querySelector('#monReadings').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setPrimaryReading(b.dataset.key) })
     panel.querySelector('#monRanges').addEventListener('click', e => {
       const b = e.target.closest('button')
@@ -168,7 +178,7 @@
     }
     pill.querySelector('span').textContent = trend.available
       ? `Trending ${trend.trending || 0} values · every ${trend.sampleSeconds || 10} s · ${trend.location !== 'removable' ? 'on disk' : trend.mount && /\/(sd|usb)/.test(trend.mount) ? 'on USB' : 'on SD card'}${typeof trend.freeBytes === 'number' ? ` · ${(trend.freeBytes / 1073741824).toFixed(1)} GB free` : ''}`
-      : trend.reason === 'no_sd_card' ? 'No SD card or USB stick: trends off' : trend.reason === 'write_failed' ? 'Card found but not writable: trends off' : 'Trends unavailable'
+      : trend.reason === 'disabled' ? 'Trends off (tick Record trends in the settings)' : trend.reason === 'not_started' ? 'Trends starting…' : trend.reason === 'no_sd_card' ? 'No SD card or USB stick: trends off' : trend.reason === 'write_failed' ? 'Card found but not writable: trends off' : 'Trends unavailable'
   }
   function schedule () {
     clearTimeout(pollTimer)
@@ -387,16 +397,32 @@
     chart.series = [makeSeries(item, r, cssRgb('var(--cat)'))]
     document.querySelector('#monIcon').innerHTML = `<div class="cat-icon">${groupIcon(g)}</div>`
     document.querySelector('#monTitle').textContent = item.name
+    document.querySelector('#monBackdrop').classList.add('show')
+    document.body.classList.add('mon-trend-open')
     render()
     loadTrend()
-    panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   function closeTrend () {
     chart.open = false
     clearInterval(chart.timer)
     const p = document.querySelector('#monPanel')
     if (p) p.classList.remove('show')
+    const b = document.querySelector('#monBackdrop')
+    if (b) b.classList.remove('show')
+    document.body.classList.remove('mon-trend-open')
+    setTrendFull(false)
     render()
+  }
+  // Full screen: the window fills the page (on a phone it always does).
+  function setTrendFull (full) {
+    const p = document.querySelector('#monPanel')
+    if (!p) return
+    p.classList.toggle('full', full)
+    const btn = document.querySelector('#monFull')
+    btn.setAttribute('aria-pressed', String(full))
+    btn.setAttribute('title', full ? 'Exit full screen' : 'Full screen')
+    document.querySelector('#monFullIcon').setAttribute('d', full ? 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' : 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5')
+    if (chart.open) draw()
   }
   // The reading buttons (Voltage / Current / …) change the first value only.
   function setPrimaryReading (key) {

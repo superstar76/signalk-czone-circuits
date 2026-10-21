@@ -1,10 +1,10 @@
 # signalk-czone-circuits: the monitoring fork
 
-What the fork adds to Matt Mitchell's plugin and what it changes, as of 15 October 2026.
+What the fork adds to Matt Mitchell's plugin and what it changes, as of 21 October 2026.
 
 **Fork:** `github.com/superstar76/signalk-czone-circuits`, branch `monitoring`
 **Based on:** Matt Mitchell's `signalk-czone-circuits`, `main` at `45c47d1` (beta.20), merged in with no conflicts. His beta.22 restructure is not merged yet.
-**State:** 15 October 2026 (evening). Matt's new plugin, `signalk-czone`, is on npm at 0.3.0-beta.13. From this work it now has confirm before on/off (#17), Control X PLUS current (#18), trends off by default (#24, from our #23) and the honest connection line (#25). The parser fixes are with him as `signalk-czone-zcf` #13. See section 13.
+**State:** 21 October 2026. Matt's new plugin, `signalk-czone`, is on npm at 0.3.0-beta.18 and has most of this work: confirm before on/off, Control X PLUS current, trends, the connection line, third-party switches, chartplotter fixes and touch layout, switch inputs, the settings fix, the Victron switch pane and the login form. Monitoring is with him as #36. See section 13.
 **Run on:** the CZone test bench and Compass Rose, both on a Cerbo GX with Venus OS 3.80 and Signal K 2.27, and both reachable remotely over Tailscale
 **Size:** about 5,300 lines of new code in 20 new files (and three small shell scripts), 3,200 lines of new tests in 15 new test files with 4 new sample ZCFs, and about 980 lines added to six of Matt's files
 
@@ -32,11 +32,11 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
 
 | Group | From the ZCF | Readings |
 |---|---|---|
-| Batteries | DC meters of type Battery | voltage, current, state of charge, temperature |
-| Solar, Alternators, Converters, Wind Generators | DC meters of that type | voltage, current |
+| Batteries | DC meters of type Battery | voltage, current, power, state of charge, temperature |
+| Solar, Alternators, Converters, Wind Generators | DC meters of that type | voltage, current, power |
 | AC Power | AC meters | voltage, current, power, frequency |
 | Tanks | tank senders | level %, volume |
-| Temperatures | temperature senders | °C |
+| Temperatures | temperature senders | °C, and humidity where the same instance sends it (a Ruuvi tag) |
 | Environment | pressure senders | hPa / kPa |
 | Inputs | switch inputs | ON / OFF on a Signal Interface, a Combination Output Interface and a Control X PLUS |
 
@@ -65,14 +65,18 @@ A **Monitoring** entry in the webapp lists everything the CZone configuration mo
   - **What the file does:** puts `sdcard-rw.sh` in `/data` and adds one line to `/data/rc.local` to run it at boot. The script mounts each FAT card or stick again with open permissions, stopping the VRM logger for the moment that takes, and does nothing when the card is already open.
   - **How far it is tested:** the archive, both scripts and the download are covered by `npm test` (the scripts in a dry run against mount tables copied from the bench). The original, simpler script was pasted in by hand on the bench Cerbo and works there. The file-on-the-card route itself has not yet been run on a GX.
   - **With no card at all** the pill says "No SD card or USB stick: trends off".
-- **Chart:** an in-page panel with 1 h, 24 h, 7 d, 31 d, 90 d, 1 y or a custom from/to period; now/min/avg/max; a hover crosshair; gaps where data is missing. Periods over 48 hours draw the average with a min–max band, so short spikes stay visible.
+- **DC power (21 Oct):** watts for every DC meter, volts × amps of its two readings, trended like the rest (solar, alternator and wind output).
+- **Humidity (21 Oct):** PGN 130313 on the instance of a temperature sender is shown with it.
+- **Readings Signal K itself sends (21 Oct):** a sender bridged by Signal K's "Signal K to NMEA 2000" plugin (a Ruuvi tag from a Bluetooth plugin) is taken from what that plugin hands Signal K to send (`nmea2000JsonOut`). Signal K does not pass its own transmissions to plugins. While the wire listener delivers, it sees them on the wire and this is not used.
+- **Chart (window, 21 Oct):** a trend opens as a window in the middle of the page, over a dimmed page that stays where it was; ✕, a tap outside or Escape closes it. A full-screen button makes it fill the page; on a phone it always does. Checked in Chromium and in Chromium 69 (the plotter).
+- **Chart:** a panel with 1 h, 24 h, 7 d, 31 d, 90 d, 1 y or a custom from/to period; now/min/avg/max; a hover crosshair; gaps where data is missing. Periods over 48 hours draw the average with a min–max band, so short spikes stay visible.
 - **Several values on one chart:** "Add value" puts any other trended value on the chart, up to five. Each unit gets its own scale; "Stacked" shows one plot per unit on the same time axis.
 - **Earlier history:** data already on the card from the February plugin is read in place. Old folder names are matched automatically where possible; others are mapped in `aliases.json` in the trend folder. Compass Rose's history back to late September is readable this way.
 
 ### 1.3 Circuit current
 
 - **Shown** under ON on each circuit's button in the webapp, and in the Victron switch label.
-- **Trend:** the arrow beside ON/OFF opens that circuit's current trend. A trend opens at the top of the page whichever tab it is opened from.
+- **Trend:** the arrow beside ON/OFF opens that circuit's current trend, in the trend window (see 1.2).
 - **Decoded** from CZone's own output tables, 0.1 A resolution:
 
   | PGN | Sent by |
@@ -103,6 +107,7 @@ An opt-in setting registers the circuits with the GX as `com.victronenergy.switc
 - **Order:** the GX lists switches alphabetically by label and has no other order. The label is written so a switch stays in the same place whether it is on or off.
 - **A steady label:** each change of a switch's name makes the GX re-sort its lists and jump to the selected row. So a reading that only wobbles (1.9 A, 2.0 A, 1.9 A) no longer changes the label. A step of 0.2 A or half a degree shows at once, as do on and off; a smaller change shows once it has held for two minutes (current) or five (temperature). The GX's own current column is always exact.
 - **Edits made on the GX are kept:** switch names, groups and types, and the device's own name.
+- **Momentary (21 Oct, from Matt's review of #33):** choosing momentary for a switch that is on sends it off first, through the same checks as a tap; if the off is refused, so is the type change. Until CZone reports the output off the change is provisional: with no off within five seconds the type goes back to toggle and the pane shows it on.
 - **The device list:** Settings > Devices lists each switch as "Name: label", so every switch's Name is "CZone": "CZone: Freezer (13.3 °C)", in A-Z order. (The circuit name showed it twice; a module and channel number meant nothing to most people.)
 
 ### 1.6 The circuit list
@@ -181,7 +186,7 @@ A switch that is not on the CZone network (a Shelly, a GX relay, any output in t
 
 - **From Matt's plugin (0.3.0-beta.13):** the fullscreen button beside the CZone logo, and the home-screen app (manifest and icons), so the webapp opens full screen like an app. Over HTTPS (signalk-ssl) a tablet launches it with no address bar. Hidden on the chartplotter, whose tile is already full screen.
 - **Login on the page:** a home-screen app keeps its own login, separate from the browser, and has no address bar to reach the Signal K admin page. When Signal K refuses the circuit list, the page now shows a user name and password form (Signal K's own login, "remember me" on) instead of a link to the admin page.
-- **Checked** in a current Chromium (form, wrong password, login, list loads) and in Chromium 69 (plotter: no button, no errors). Still to be seen on an iPad and an Android tablet.
+- **Checked** in a current Chromium (form, wrong password, login, list loads) and in Chromium 69 (plotter: no button, no errors). Confirmed on Android, 18 October: from home over Tailscale and HTTPS (signalk-ssl), login on the page, installed as an app, circuits switched. Still to be seen on an iPad.
 
 ## 2. How readings are found with nothing configured
 
@@ -281,6 +286,8 @@ All under `/plugins/signalk-czone-circuits`.
 | COI inputs never changed (SugarShack) | A COI sends inputs only in PGN 65308, which Signal K's parser reports under another number | Recognised by CAN identifier; COI layout added |
 | Every circuit off, only ON could be sent (Compass Rose) | ZCF has no status table | State from module and channel |
 | No circuit current (Compass Rose) | Control X PLUS uses PGN 130825 | Decoder for the packed table |
+| Confirm-before-off circuits, switch pane and trends lost after loading a new ZCF (Compass Rose, 18 Oct) | Uploading a ZCF, or using a saved network configuration, saved only the configuration source and the sending switch, so every other setting was wiped | Only the configuration source changes; all other settings are kept |
+| Trends pill said "Trends unavailable" when trends were simply off | One wording for several reasons | "Trends off (tick Record trends in the settings)" or "Trends starting…" |
 | Switch pane all off after a restart | The pane read state back from Signal K and missed it | The pane takes state from the plugin's own decoded state |
 | Signal K could crash when the plugin was stopped while starting | Unhandled error on a D-Bus connection closed mid-handshake | Error handled; overtaken starts end cleanly |
 | "Solar" showed 12.6 V, 0 A | Three devices on DC instance 1; the wrong one was taken | Device matched by DC type |
@@ -391,7 +398,7 @@ The chartplotter view adds a second plugin, `signalk-navico-embedder`, which con
 ## 12. Limits and open items
 
 - **The fork stays on Matt's old plugin.** It will not be merged as a whole. Its features go to Matt's new plugin (`signalk-czone`, on npm) one pull request at a time, rebuilt to fit his code (section 13). Once the ones that matter are in, Compass Rose and the bench move to his plugin.
-- **Trend storage, two fixes to bring back from Matt.** His review of #23 found that a custom trend folder could get round the GX "card or stick only" rule, and that card detection could stay cached after a card is removed. Fixed in his #24; the fork's trend code has the same origin and needs the same two fixes.
+- **Trend storage:** Matt's two fixes from #24 are in (21 Oct): on a GX a custom trend folder must be on a card or stick (symlinks included), and a card that is removed is noticed at once.
 - **Overview page:** an idea for a power overview tab, worked to a second mock-up and parked (separate write-up, 15 October). No code.
 - **Our own copy of the circuit parser.** `lib/zcf-circuits.js` is Matt's structural parser plus the hidden-duplicate rule. Once his has the rule, ours can go.
 - **Control X PLUS inputs wired to negative** are read one bit above their number, from a single example (Compass Rose's bilge float). A second input to negative on another boat would confirm it.

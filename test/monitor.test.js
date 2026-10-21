@@ -562,7 +562,30 @@ function writeFebruary (folder, value) {
   const ac = name => Object.fromEntries(out.items.find(i => i.name === name).readings.map(r => [r.key, r.value]))
   assert.deepStrictEqual(ac('Power In'), { voltage: 236.7, current: 0, power: 9, frequency: 50 })
   assert.deepStrictEqual([ac('Power Out').voltage, ac('Power Out').frequency], [232.2, 50])
+  // Humidity (130313) on a temperature sender's instance goes with it.
+  monitor.onRawFrame('10:00:03.000 R 15FD09E0 00 65 00 B6 35 FF FF FF')
+  // What Signal K itself sends (the "Signal K to NMEA 2000" plugin): the
+  // Ruuvi tag's humidity, bridged by a Bluetooth plugin.
+  monitor.onJsonOut({ pgn: 130313, prio: 2, dst: 255, fields: { Instance: 102, Source: 'Inside', 'Actual Humidity': 62 } })
+  monitor.onJsonOut({ pgn: 127508, fields: { Instance: 102 } }) // not a sensor message: ignored
+  routes['/monitor/items']({ query: {} }, { json: v => { out = v } })
+  const vals = name => Object.fromEntries(out.items.find(i => i.name === name).readings.map(r => [r.key, r.value]))
+  assert.deepStrictEqual(vals('Victron Temp Sensor'), { temperature: 288.15, humidity: 0.55 })
+  assert.deepStrictEqual(vals('Ruuvi Tag'), { temperature: 295.15, humidity: 0.62 })
   monitor.stop()
+}
+
+// --- What Signal K sends, as the "Signal K to NMEA 2000" plugin builds it.
+{
+  const { decodeSensorJson } = require('../lib/monitor/sensors')
+  const { FILTERS } = require('../lib/monitor/wire')
+  assert.deepStrictEqual(decodeSensorJson({ pgn: 130312, fields: { Instance: 1, Source: 'Freezer Temperature', 'Actual Temperature': 255.15 } }), [{ key: 'temperature:1:13', value: 255.15 }])
+  assert.deepStrictEqual(decodeSensorJson({ pgn: 130312, fields: { instance: 0, source: 'Refridgeration Temperature', actualTemperature: 278 } }), [{ key: 'temperature:0:7', value: 278 }])
+  assert.deepStrictEqual(decodeSensorJson({ pgn: 130313, Instance: 100, Source: 'Outside', 'Actual Humidity': 0.5 }), [{ key: 'humidity:100:0', value: 0.5 }])
+  assert.deepStrictEqual(decodeSensorJson({ pgn: 130314, fields: { Instance: 0, Source: 'Atmospheric', Pressure: 101300 } }), [{ key: 'pressure:0:0', value: 101300 }])
+  assert.deepStrictEqual(decodeSensorJson({ pgn: 127505, fields: { Instance: 0, Type: 'Fuel', Level: 40, Capacity: 300 } }).map(v => [v.key, Math.round(v.value * 1000) / 1000]), [['tank:0:0', 0.4], ['tankVolume:0:0', 0.12]])
+  assert.deepStrictEqual(decodeSensorJson({ pgn: 130312, fields: { Instance: 1, Source: 'Somewhere', 'Actual Temperature': 290 } }), [])
+  assert(FILTERS.includes('01FD0900:01FFFF00'), 'candump passes humidity')
 }
 
 // --- Wire listener: candump output (format as on the bench) reaches the
@@ -598,8 +621,19 @@ function writeFebruary (folder, value) {
     const by = Object.fromEntries(out.items.map(i => [i.name, i]))
     assert.strictEqual(by['Ruuvi Tag'].readings[0].value, 300.74)
     assert.strictEqual(by['Victron Temp Sensor'].readings[0].value, 298.67)
+    // While candump delivers, what Signal K sends is read off the wire, not twice.
+    monitor.onJsonOut({ pgn: 130312, fields: { Instance: 101, Source: 'Outside Temperature', 'Actual Temperature': 250 } })
+    monitor.onJsonOut({ pgn: 130313, fields: { Instance: 102, Source: 'Inside', 'Actual Humidity': 62 } })
+    routes['/monitor/items']({ query: {} }, { json: v => { out = v } })
+    assert.strictEqual(out.items.find(i => i.name === 'Victron Temp Sensor').readings[0].value, 298.67)
+    assert.strictEqual(out.items.find(i => i.name === 'Ruuvi Tag').readings.find(r => r.key === 'humidity').value, null)
     const shunt = Object.fromEntries(by['Victron Shunt'].readings.map(r => [r.key, r.value]))
     assert.deepStrictEqual([shunt.voltage, shunt.current, shunt.soc], [13.27, -2.5, 0.87])
+    // DC watts: volts x amps of the shunt (13.27 V x -2.5 A), trended under .power.
+    assert.strictEqual(shunt.power, -33.2)
+    assert.strictEqual(by['Victron Shunt'].readings.find(r => r.key === 'power').series, 'electrical.batteries.2.power')
+    // A meter with no reading has no power either.
+    assert.strictEqual(Object.fromEntries(by['House Battery'].readings.map(r => [r.key, r.value])).power, null)
     monitor.stop()
     console.log('Monitor wire tests passed')
   }, 500)

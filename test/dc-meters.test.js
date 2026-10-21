@@ -93,7 +93,8 @@ for (const order of [FRAMES, [...FRAMES].reverse()]) {
 
   // Solar: the only device that calls instance 1 "solar cell" is the MPPT.
   // No state of charge or temperature offered for a solar meter.
-  assert.deepStrictEqual(meter('Solar'), { voltage: 81.44, current: 6.5 })
+  // Its power is volts x amps of the same device (81.44 V x 6.5 A).
+  assert.deepStrictEqual(meter('Solar'), { voltage: 81.44, current: 6.5, power: 529.4 })
   // House Battery: five candidates; the one that reports state of charge wins.
   const house = meter('House Battery')
   assert.deepStrictEqual([house.voltage, house.current, house.soc], [13.57, 31, 0.84])

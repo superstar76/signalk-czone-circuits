@@ -69,7 +69,29 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(async status => {
   assert.match(sw.status().recent[0].result, /sending is disabled/)
   // Invalid type for a non-dimmer is refused; momentary is allowed
   assert.strictEqual(objects['/SwitchableOutput/Light_3/Settings/Type'].SetValue([[{ type: 'i' }], [2]]), 1)
+  // Momentary resets the output (Victron's switch API): Light 3 is on from the
+  // tap above, so choosing momentary sends it off first.
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_3/State'), ['i', 1])
   assert.strictEqual(objects['/SwitchableOutput/Light_3/Settings/Type'].SetValue([[{ type: 'i' }], [0]]), 0)
+  assert.deepStrictEqual(calls[calls.length - 1], ['Light_3', false])
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_3/State'), ['i', 0])
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_3/Settings/Type'), ['i', 0])
+  // An output that cannot be turned off (here: refused by the host, as for
+  // sending disabled or confirm before off) keeps its type, and stays on.
+  objects['/SwitchableOutput/Light_4/State'].SetValue([[{ type: 'i' }], [1]]) // refused: still off
+  sk['electrical.czone.Light_4.switch.state'] = { value: true }
+  deltaListener({ path: 'electrical.czone.Light_4.switch.state', value: true })
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_4/State'), ['i', 1])
+  assert.strictEqual(objects['/SwitchableOutput/Light_4/Settings/Type'].SetValue([[{ type: 'i' }], [0]]), 1)
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_4/Settings/Type'), ['i', 1])
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_4/State'), ['i', 1])
+  // Momentary from off: nothing is switched.
+  const callsBefore = calls.length
+  assert.strictEqual(objects['/SwitchableOutput/Light_5/Settings/Type'].SetValue([[{ type: 'i' }], [0]]), 0)
+  assert.strictEqual(calls.length, callsBefore)
+  objects['/SwitchableOutput/Light_5/Settings/Type'].SetValue([[{ type: 'i' }], [1]])
+  sk['electrical.czone.Light_4.switch.state'] = { value: false }
+  deltaListener({ path: 'electrical.czone.Light_4.switch.state', value: false })
   // Current shown in the label while on (Light 2 is on at 1.5 A)
   assert.deepStrictEqual(get('/SwitchableOutput/Light_2/Settings/CustomName'), ['s', 'Light 2 (1.5 A)'])
   // A rename from the GUI keeps the name, not the amps
@@ -105,6 +127,38 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(async status => {
   sw._resync()
   Date.now = realNow
   assert.deepStrictEqual(get('/SwitchableOutput/Light_3/State'), ['i', 0])
+  // Momentary chosen while on is provisional until CZone reports the off.
+  // Confirmed: it stands.
+  objects['/SwitchableOutput/Light_1/Settings/Type'].SetValue([[{ type: 'i' }], [1]])
+  sk['electrical.czone.Light_1.switch.state'] = { value: true }
+  sw._resync()
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_1/State'), ['i', 1])
+  assert.strictEqual(objects['/SwitchableOutput/Light_1/Settings/Type'].SetValue([[{ type: 'i' }], [0]]), 0)
+  sk['electrical.czone.Light_1.switch.state'] = { value: false }
+  deltaListener({ path: 'electrical.czone.Light_1.switch.state', value: false })
+  Date.now = () => realNow() + 6000
+  sw._resync()
+  Date.now = realNow
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Settings/Type'), ['i', 0])
+  objects['/SwitchableOutput/Light_1/Settings/Type'].SetValue([[{ type: 'i' }], [1]])
+  // Never confirmed (the circuit stays on): the type goes back to toggle
+  // after the grace period, and the pane shows it on.
+  sk['electrical.czone.Light_1.switch.state'] = { value: true }
+  Date.now = () => realNow() + 6000 // past the grace of the step above
+  sw._resync()
+  Date.now = realNow
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_1/State'), ['i', 1])
+  assert.strictEqual(objects['/SwitchableOutput/Light_1/Settings/Type'].SetValue([[{ type: 'i' }], [0]]), 0)
+  sw._resync() // within the grace period: nothing undone yet
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Settings/Type'), ['i', 0])
+  Date.now = () => realNow() + 6000
+  sw._resync()
+  Date.now = realNow
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Settings/Type'), ['i', 1])
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_1/State'), ['i', 1])
+  assert(sw.status().recent.some(r => /did not confirm the off/.test(r.refused || '')))
+  sw._resync() // settled: stays toggle
+  assert.deepStrictEqual(get('/SwitchableOutput/Light_1/Settings/Type'), ['i', 1])
   // States are repeated to the GX even when nothing changed, so a listener
   // holding a stale value (snapshot taken while the service was starting) recovers.
   await new Promise(resolve => setTimeout(resolve, 80)) // let earlier changes flush
@@ -156,7 +210,8 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(async status => {
   {
     const states = { Light_2: { state: 'ON', percent: 40 }, Light_3: { state: 'OFF', percent: 0 }, Buzzer: { state: null } }
     const blind = { ...app, getSelfPath: () => undefined, streambundle: { getSelfBus: () => ({ onValue: () => () => {} }) } }
-    const sw4 = createVictronSwitches(blind, { controls: () => ({ getState: slug => states[slug] || null }), version: 'test' })
+    const offs = []
+    const sw4 = createVictronSwitches(blind, { controls: () => ({ getState: slug => states[slug] || null, state: (slug, on) => { if (!on) offs.push(slug) } }), version: 'test' })
     await sw4.start({ victronSwitches: true }, zcf, { bus })
     assert.deepStrictEqual(get('/SwitchableOutput/Light_2/State'), ['i', 1])
     assert.deepStrictEqual(get('/SwitchableOutput/Light_3/State'), ['i', 0])
@@ -167,6 +222,22 @@ sw.start({ victronSwitches: true }, zcf, { bus }).then(async status => {
     assert.deepStrictEqual(r4.diag.seedFound, { plugin: 2, signalk: 0 })
     assert.strictEqual(r4.diag.signalkValues, 0)
     assert.deepStrictEqual(r4.on.sort(), ['Light_2', 'Light_3'])
+    // Momentary while on, read through the plugin's state (not Signal K): an
+    // off CZone never confirms puts toggle back.
+    const realNow4 = Date.now
+    const later = ms => { Date.now = () => realNow4() + ms; sw4._resync(); Date.now = realNow4 }
+    assert.strictEqual(objects['/SwitchableOutput/Light_3/Settings/Type'].SetValue([[{ type: 'i' }], [0]]), 0)
+    assert.deepStrictEqual(offs, ['Light_3'])
+    later(1000)
+    assert.deepStrictEqual(get('/SwitchableOutput/Light_3/Settings/Type'), ['i', 0])
+    later(6000)
+    assert.deepStrictEqual(get('/SwitchableOutput/Light_3/Settings/Type'), ['i', 1])
+    assert.deepStrictEqual(get('/SwitchableOutput/Light_3/State'), ['i', 1])
+    // …and one it does confirm leaves momentary in place.
+    assert.strictEqual(objects['/SwitchableOutput/Light_3/Settings/Type'].SetValue([[{ type: 'i' }], [0]]), 0)
+    states.Light_3 = { state: 'OFF', percent: 0 }
+    later(12000)
+    assert.deepStrictEqual(get('/SwitchableOutput/Light_3/Settings/Type'), ['i', 0])
     sw4.stop()
   }
 
